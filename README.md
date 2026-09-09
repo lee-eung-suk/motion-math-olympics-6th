@@ -124,6 +124,24 @@
 `help1~2.png`는 5학년판 것이 들어 있어 "두 손" 기준이라, 온몸 기준으로 교체가 필요합니다.
 `og-image.png` · `favicon.png`도 아직 없습니다. 프롬프트는 `IMAGE_ASSETS.md`에 있습니다.
 
+## 🚀 배포
+
+| | |
+|---|---|
+| **서비스 주소** | https://motion-math-olympics-6th.vercel.app |
+| **저장소** | https://github.com/lee-eung-suk/motion-math-olympics-6th |
+
+**GitHub 연동이 아니라 Vercel CLI 직접 배포입니다** — 푸시만으로는 반영되지 않습니다.
+코드를 고친 뒤에는 반드시 이 두 가지를 따로 해 주세요.
+
+```bash
+git add -A && git commit -m "설명" && git push
+npx vercel --prod
+```
+
+`vercel.json`이 없으면 **MediaPipe wasm이 로드되지 않습니다** — `.wasm` 파일에
+`Content-Type: application/wasm`을 붙여 주는 설정이 그 안에 있습니다. 지우지 마세요.
+
 ## ▶️ 실행
 
 정적 파일이므로 아무 웹 서버에나 올리면 됩니다. 로컬에서는:
