@@ -502,6 +502,17 @@ export function renderPodium({ unit, medal, label, coins, maxCombo, count, suffi
   const stars = Math.floor(coins / 10);
   const earnedStar = medal !== "🏅";
 
+  // 칭호 — 메달만으로는 "잘했다"는 느낌이 약해서, 코인에 따라 등급을 하나 더 준다.
+  // 아무리 못해도 🐣 새싹은 받으므로 빈손으로 끝나는 일이 없다.
+  const RANKS = [
+    { min: 0,   emoji: "🐣", name: "새싹 선수",   line: "출발이 좋아! 다음엔 더 잘할 수 있어" },
+    { min: 40,  emoji: "🏃", name: "도전자",     line: "몸이 잘 풀렸는걸?" },
+    { min: 90,  emoji: "🔥", name: "에이스",     line: "오늘 컨디션 최고인데!" },
+    { min: 160, emoji: "🌟", name: "슈퍼스타",   line: "관중석이 난리 났어!" },
+    { min: 250, emoji: "👑", name: "챔피언",     line: "이건 전설이다…!" },
+  ];
+  const rank = RANKS.reduce((a, r) => (coins >= r.min ? r : a), RANKS[0]);
+
   host.innerHTML = `
     <div class="podium-stage">
       <div class="podium-char">${char.emoji}</div>
@@ -516,7 +527,8 @@ export function renderPodium({ unit, medal, label, coins, maxCombo, count, suffi
       <span class="pc-arrow">→</span>
       <span class="pc-stars" id="pcStars"></span>
     </div>
-    <div class="podium-line">${char.name}: "${earnedStar ? "별 하나 챙겼다! 최고야!" : "다음엔 별을 노려 보자!"}"</div>
+    <div class="podium-rank"><span class="pr-emoji">${rank.emoji}</span><span class="pr-name">${rank.name}</span></div>
+    <div class="podium-line">${char.name}: "${rank.line}"</div>
   `;
 
   // 코인 카운트업 — 숫자가 다 올라가면 별이 하나씩 톡톡 뜬다
@@ -541,7 +553,7 @@ export function renderPodium({ unit, medal, label, coins, maxCombo, count, suffi
     }
   })();
 
-  return { stars, earnedStar };
+  return { stars, earnedStar, rank };
 }
 
 // 별 모양 화면 전환 (아이리스 와이프) — 종목을 오갈 때 마리오파티처럼 팍 닫혔다 열린다

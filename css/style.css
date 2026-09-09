@@ -554,3 +554,16 @@ body.landing .star-progress{color:#c26a00;}
 @media (max-height:520px){
   .card-motion{display:none;}
 }
+
+/* 결과 화면 칭호 — 메달만으로는 "잘했다"는 느낌이 약해서 코인에 따른 등급을 하나 더 준다 */
+.podium-rank{
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  margin:10px auto 2px;padding:8px 20px;width:fit-content;
+  background:linear-gradient(180deg,#fff6d8,#ffd166);
+  border:3px solid #22305c;border-radius:999px;
+  box-shadow:0 5px 0 #22305c, 0 9px 16px #00000030;
+  animation:rank-pop .5s cubic-bezier(.34,1.5,.64,1) both;
+}
+.podium-rank .pr-emoji{font-size:clamp(1.4rem, 4vw, 2rem);}
+.podium-rank .pr-name{font-size:clamp(1rem, 2.6vw, 1.35rem);font-weight:900;color:#22305c;}
+@keyframes rank-pop{from{opacity:0;transform:scale(.6) rotate(-6deg);}to{opacity:1;transform:none;}}

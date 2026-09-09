@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "mmo6",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "cd / && exec python3 -m http.server 8796 --directory /tmp/mmo6"],
+      "port": 8796
+    }
+  ]
+}

@@ -325,6 +325,23 @@ let lastFrameAt = 0;
 
 // 카드는 손이 닿으면 즉시 선택된다. 예전에는 0.9초 올려두고 기다렸는데,
 // 그 대기 시간 동안 몸이 완전히 멈춰 버려서 체육 활동이 아니게 됐다.
+// ── 도움 표시 ── 두 번 연속 틀리면 다음 문제의 정답을 반짝여 알려 준다.
+// 계속 틀리기만 하면 아이는 포기한다. "한 번은 맞혀 보는 경험"이 있어야 다음을 시도한다.
+let missStreak = 0;
+function helpOn() { return missStreak >= 2; }
+function drawHelpRing(ctx, x, y, r) {
+  if (!helpOn()) return;
+  const t = (performance.now() % 800) / 800;
+  ctx.save();
+  ctx.globalAlpha = 0.9 * (1 - t * 0.5);
+  ctx.strokeStyle = PARTY.gold;
+  ctx.lineWidth = Math.max(4, r * 0.22);
+  ctx.beginPath();
+  ctx.arc(x, y, r * (1.15 + t * 0.35), 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
 const ROUND_MS = 11000;      // 이 안에 못 고르면 놓침 — 시간 압박이 있어야 리듬이 산다
 const NEXT_MS = 600;
 // 어깨 너비/초 — 이보다 빠르게 손이 지나가면 "휘둘렀다".
@@ -430,6 +447,7 @@ function choose(i) {
     party.correct(c.x, c.y, { base: 11 * (spurt ? 2 : 1), elapsedMs: performance.now() - roundAt });
     if (party.combo > 0 && party.combo === party.maxCombo) comboShot.capture(canvas);
     autoDiff.reportCorrect();
+    missStreak = 0;
     autoRec.trigger();
     shake.trigger(9, 220);
     if (!isMuted()) sound.hit("perfect");
@@ -441,6 +459,7 @@ function choose(i) {
   } else {
     party.wrong(c.x, c.y, "돌려서 다시 봐요!");
     autoDiff.reportWrong();
+    missStreak++;
     shake.trigger(6, 170);
     if (!isMuted()) sound.wrong();
   }
@@ -617,6 +636,17 @@ function drawCards(ctx) {
     } else {
       drawGrid(ctx, c.v, c.x, c.y, Math.min(c.w, c.h) * 0.27, round.kind === "numbers");
     }
+    // 두 번 연속 틀렸으면 정답 카드를 반짝여 알려 준다
+    if (helpOn() && c.ok && !resolving) {
+      const t = (performance.now() % 800) / 800;
+      ctx.save();
+      ctx.globalAlpha = 0.9 * (1 - t * 0.5);
+      ctx.strokeStyle = PARTY.gold;
+      ctx.lineWidth = Math.max(5, c.w * 0.07);
+      const g = 6 + t * 10;
+      ctx.strokeRect(c.x - c.w / 2 - g, c.y - c.h / 2 - g, c.w + g * 2, c.h + g * 2);
+      ctx.restore();
+    }
     // 손이 올라온 카드는 금색 테두리로 알려 준다 (닿는 순간 선택된다)
     if (hot) {
       ctx.save();
@@ -726,6 +756,7 @@ function stepGame() {
     resolving = true;
     party.wrong(w * 0.5, h * 0.5, "시간 초과!");
     autoDiff.reportWrong();
+    missStreak++;
     if (!isMuted()) sound.wrong();
     setTimeout(() => { if (state === "playing") newRound(); }, NEXT_MS);
   }

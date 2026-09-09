@@ -248,6 +248,23 @@ function drawStreak(ctx) {
   ctx.restore();
 }
 
+// ── 도움 표시 ── 두 번 연속 틀리면 다음 문제의 정답을 반짝여 알려 준다.
+// 계속 틀리기만 하면 아이는 포기한다. "한 번은 맞혀 보는 경험"이 있어야 다음을 시도한다.
+let missStreak = 0;
+function helpOn() { return missStreak >= 2; }
+function drawHelpRing(ctx, x, y, r) {
+  if (!helpOn()) return;
+  const t = (performance.now() % 800) / 800;
+  ctx.save();
+  ctx.globalAlpha = 0.9 * (1 - t * 0.5);
+  ctx.strokeStyle = PARTY.gold;
+  ctx.lineWidth = Math.max(4, r * 0.22);
+  ctx.beginPath();
+  ctx.arc(x, y, r * (1.15 + t * 0.35), 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function isSpurt() { return playEndAt - performance.now() < 10000; }
 
 // 콤보가 쌓일수록, 마지막 10초에는 접시가 빨리 떨어진다
@@ -338,6 +355,7 @@ function hitDisc(d) {
     party.correct(d.x, d.y, { base: 11 * (isSpurt() ? 2 : 1), elapsedMs: performance.now() - roundAt });
     if (party.combo > 0 && party.combo === party.maxCombo) comboShot.capture(canvas);
     autoDiff.reportCorrect();
+    missStreak = 0;
     noteStreak(party.combo);
     autoRec.trigger();
     if (!isMuted()) sound.hit("perfect");
@@ -349,6 +367,7 @@ function hitDisc(d) {
   } else {
     party.wrong(d.x, d.y, `정답은 ${fmt(round.ans)}`);
     autoDiff.reportWrong();
+    missStreak++;
     if (!isMuted()) sound.wrong();
   }
   setTimeout(() => { if (state === "playing") newRound(); }, NEXT_MS);
@@ -465,6 +484,7 @@ function drawDiscs(ctx, now) {
     ctx.strokeStyle = "rgba(255,255,255,0.8)"; ctx.lineWidth = Math.max(2, r * 0.07); ctx.stroke();
     ctx.restore();
 
+    if (d.ok) drawHelpRing(ctx, d.x, d.y, r);
     const label = fmt(d.v);
     let fs = r * 0.62;
     ctx.save(); ctx.font = `900 ${fs}px sans-serif`;

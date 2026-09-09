@@ -270,6 +270,23 @@ function drawStreak(ctx) {
   ctx.restore();
 }
 
+// ── 도움 표시 ── 두 번 연속 틀리면 다음 문제의 정답을 반짝여 알려 준다.
+// 계속 틀리기만 하면 아이는 포기한다. "한 번은 맞혀 보는 경험"이 있어야 다음을 시도한다.
+let missStreak = 0;
+function helpOn() { return missStreak >= 2; }
+function drawHelpRing(ctx, x, y, r) {
+  if (!helpOn()) return;
+  const t = (performance.now() % 800) / 800;
+  ctx.save();
+  ctx.globalAlpha = 0.9 * (1 - t * 0.5);
+  ctx.strokeStyle = PARTY.gold;
+  ctx.lineWidth = Math.max(4, r * 0.22);
+  ctx.beginPath();
+  ctx.arc(x, y, r * (1.15 + t * 0.35), 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function isSpurt() { return playEndAt - performance.now() < 10000; }
 // 풍선이 화면을 가로지르는 시간 — 콤보가 쌓일수록 빨라진다
 function driftMs() {
@@ -377,6 +394,7 @@ function resolveArrow(x, y) {
     party.correct(hit.x, hit.y, { base: 12 * (isSpurt() ? 2 : 1), elapsedMs: performance.now() - roundAt });
     if (party.combo > 0 && party.combo === party.maxCombo) comboShot.capture(canvas);
     autoDiff.reportCorrect();
+    missStreak = 0;
     noteStreak(party.combo);
     autoRec.trigger();
     shake.trigger(10, 240);
@@ -389,6 +407,7 @@ function resolveArrow(x, y) {
   } else {
     party.wrong(hit.x, hit.y, "다시 계산해 봐요!");
     autoDiff.reportWrong();
+    missStreak++;
     if (!isMuted()) sound.wrong();
   }
   setTimeout(() => { if (state === "playing") newRound(); }, NEXT_MS);
@@ -543,6 +562,7 @@ function drawBalloons(ctx, now) {
     ctx.fillStyle = CUTE.purple; ctx.fill();
     ctx.strokeStyle = CUTE.ink; ctx.lineWidth = Math.max(2.5, r * 0.09); ctx.stroke();
     ctx.restore();
+    if (b.ok) drawHelpRing(ctx, b.x, b.y, r);
     drawSticker(ctx, b.x, b.y, r, CUTE.purple, { lineWidth: Math.max(3, r * 0.11) });
     const label = fmt(b.v);
     let fs = fs0;
