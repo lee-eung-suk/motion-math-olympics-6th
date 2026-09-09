@@ -1,0 +1,829 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>쌓기나무 관제탑 · 종목 3</title>
+<link rel="stylesheet" href="../css/style.css?v=6">
+</head>
+<body>
+
+<div class="game-stage">
+  <video id="video" playsinline muted style="display:none"></video>
+  <canvas id="gameCanvas"></canvas>
+
+  <div class="hud">
+    <div class="rec" id="recIndicator" style="display:none"><span class="dot"></span>REC</div>
+    <button class="home-btn" id="homeBtn">🏠</button>
+  </div>
+
+  <div class="overlay-panel" id="loadingPanel">
+    <h2>🧊 쌓기나무 관제탑</h2>
+    <p id="loadingText">준비 중…</p>
+  </div>
+
+  <div class="overlay-panel" id="rulePanel" style="display:none">
+    <div class="rule-card">
+      <div class="rule-head">
+        <div class="rule-char">🐨</div>
+        <div>
+          <div class="rule-name">돌리</div>
+          <h2 class="rule-title">쌓기나무 관제탑</h2>
+        </div>
+      </div>
+      <p class="rule-cheer"></p>
+      <ul class="rule-list"></ul>
+      <div class="rule-timer"><div class="rule-timer-fill"></div></div>
+      <button class="rule-go">좋아, 시작!</button>
+    </div>
+  </div>
+
+  <div class="overlay-panel" id="raisePanel" style="display:none">
+    <div class="raise-icon" id="raiseIcon">🙋</div>
+    <h2 id="raiseText">손을 들어 주세요!</h2>
+    <div class="hold-bar"><div class="hold-fill" id="holdFill"></div></div>
+  </div>
+
+  <div class="overlay-panel ready-flash" id="readyPanel" style="display:none">
+    <h2>✋ 좋아요! 준비됐어요</h2>
+  </div>
+
+  <div class="overlay-panel" id="countdownPanel" style="display:none">
+    <div class="countdown-num" id="countNum">3</div>
+  </div>
+
+  <div class="overlay-panel" id="resultPanel" style="display:none">
+    <div id="podium"></div>
+    <div class="result-stats">
+      <div class="stat-box"><div class="num" id="statCount">0개</div><div class="label">맞힌 관제</div></div>
+      <div class="stat-box"><div class="num" id="statBest">0개</div><div class="label">최고 기록</div></div>
+      <div class="stat-box"><div class="num" id="statCombo">0</div><div class="label">최고 콤보</div></div>
+    </div>
+    <video class="preview" id="previewVideo" controls playsinline style="display:none"></video>
+    <div class="action-row">
+      <button class="ghost-btn" id="savePhotoBtn">📸 사진</button>
+      <button class="ghost-btn" id="saveVideoBtn" style="display:none">🎬 3초 영상</button>
+      <button class="big-btn" id="retryBtn">🔁 한 번 더</button>
+      <button class="ghost-btn" id="homeBtn2">🏠 종목 선택</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import {
+  HighScore, requestWakeLock, SoundKit, FileAudioLoop,
+  ClipRecorder, downloadBlob,
+  drawMirroredVideo, fitCanvasToScreen, getCursors,
+  PoseTracker, PoseMotion, posePoints, isArmRaised,
+  AutoDifficulty, levelFromUrl, medalFor,
+  scheduleAutoRecording, ComboShot, drawPhotoOverlay,
+  ScreenShake, InputMode, PointerInput, StartGate,
+  startCamera, formatFileTimestamp, fluidPx, showSoundHint,
+  drawVignette, spawnConfetti, updateConfetti, drawConfetti,
+} from "../js/engine.js?v=4";
+import {
+  CUTE, drawSticker, drawStickerRect, drawChunkyText,
+  spawnSparkles, updateSparkles, drawSparkles, makeDrifters, drawDrifters,
+  drawBunting, drawGloveCursor, drawLevelStars, drawCuteBanner,
+} from "../js/cute.js?v=7";
+import {
+  PARTY, CHARACTERS, Party, drawPartyBackdrop, drawCrowd, drawMascot,
+  showRuleCard, renderPodium, irisTransition,
+} from "../js/party.js?v=2";
+requestWakeLock();
+
+const UNIT = "n3";
+const TITLE = "쌓기나무 관제탑";
+const RECORD_SUFFIX = "개 관제";
+const MEDALS = { bronze: 4, silver: 7, gold: 10 };
+const CHAR = CHARACTERS[UNIT];
+const mode = InputMode.get();
+
+const video = document.getElementById("video");
+const canvas = document.getElementById("gameCanvas");
+let dims = fitCanvasToScreen(canvas);
+let drifters = makeDrifters(10, dims.w, dims.h);
+window.addEventListener("resize", () => {
+  dims = fitCanvasToScreen(canvas);
+  drifters = makeDrifters(10, dims.w, dims.h);
+  if (round) layoutCards();
+});
+
+const sound = new SoundKit();
+const bgm = new FileAudioLoop("../assets/sounds/subbgm.mp3", 0.32);
+const isMuted = () => localStorage.getItem("smo_muted") === "1";
+const party = new Party({ unit: UNIT, sound, isMuted });
+
+function goHome() { bgm.stop(); irisTransition(() => { location.href = "../index.html"; }); }
+document.getElementById("homeBtn").addEventListener("click", goHome);
+document.getElementById("homeBtn2").addEventListener("click", goHome);
+
+function randInt(min, max) { return min + Math.floor(Math.random() * (max - min + 1)); }
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+// ---------------------------------------------------------------------------
+// 쌓기나무 — 3 x 3 바닥 위에 층수(0~3)를 적어 둔 표 하나로 입체 전체를 나타낸다.
+// 위/앞/옆에서 본 모양은 모두 이 표에서 계산해 내므로 항상 서로 어긋나지 않는다.
+// ---------------------------------------------------------------------------
+const N = 3, MAXH = 3;
+
+function makeSolid(maxH = MAXH, minTotal = 6, maxTotal = 15) {
+  // 너무 납작하거나 꽉 찬 모양은 세 방향이 다 똑같아 보여 문제가 되지 않는다.
+  // 낮은 단계에서는 층도 낮고 개수도 적게 만들어, 한눈에 세어지는 크기로 둔다.
+  for (let tries = 0; tries < 200; tries++) {
+    const g = [];
+    for (let r = 0; r < N; r++) {
+      g.push([]);
+      for (let c = 0; c < N; c++) g[r].push(randInt(0, maxH));
+    }
+    const total = g.flat().reduce((a, b) => a + b, 0);
+    if (total < minTotal || total > maxTotal) continue;
+    const f = frontView(g), sv = sideView(g), t = topView(g);
+    if (same(f, sv) || same(f, t) || same(sv, t)) continue;   // 세 방향이 서로 달라야 문제가 된다
+    return g;
+  }
+  return [[1, 2, 0], [0, 3, 1], [2, 1, 0]];
+}
+
+function same(a, b) { return a.every((row, i) => row.every((v, j) => v === b[i][j])); }
+
+// 앞에서 보면 각 열(column)의 가장 높은 층수만큼 보인다.
+// 결과는 [층][열] 순서의 3x3 참/거짓 표 — 맨 윗줄이 3층이다.
+function frontView(g) {
+  const out = [];
+  for (let lv = MAXH - 1; lv >= 0; lv--) {
+    const row = [];
+    for (let c = 0; c < N; c++) {
+      let m = 0;
+      for (let r = 0; r < N; r++) m = Math.max(m, g[r][c]);
+      row.push(m > lv ? 1 : 0);
+    }
+    out.push(row);
+  }
+  return out;
+}
+
+// 옆에서 본 모양 — 화면에서는 입체를 90도 돌려서 보여주므로,
+// 정답도 반드시 "돌린 입체를 앞에서 본 모양"으로 정의해야 한다.
+// 행별 최댓값을 따로 계산하면 좌우가 뒤집혀 그림과 어긋난다.
+function sideView(g) { return frontView(rotate90(g)); }
+
+// 위에서 보면 층이 하나라도 있는 자리가 보인다
+function topView(g) { return g.map((row) => row.map((v) => (v > 0 ? 1 : 0))); }
+
+// 위에서 본 자리에 층수를 적은 표 (⭐3에서 쓴다)
+function topNumbers(g) { return g.map((row) => row.slice()); }
+
+function cubeCount(g) { return g.flat().reduce((a, b) => a + b, 0); }
+
+// 표 하나를 살짝 망가뜨려 그럴듯한 오답을 만든다
+function perturb(view) {
+  const v = view.map((r) => r.slice());
+  for (let t = 0; t < 30; t++) {
+    const r = randInt(0, v.length - 1), c = randInt(0, v[0].length - 1);
+    const flipped = v.map((row) => row.slice());
+    flipped[r][c] = typeof v[r][c] === "number" && v[r][c] > 1 ? v[r][c] - 1 : (v[r][c] ? 0 : 1);
+    if (!same(flipped, view)) return flipped;
+  }
+  return v;
+}
+
+
+// 보기 3장은 반드시 서로 달라야 한다.
+// perturb()가 우연히 다른 보기와 똑같은 표를 만들어 내면, 아이가 <맞는 그림을 고르고도>
+// 그게 오답 카드라서 틀리는 일이 생긴다. 그래서 중복을 걸러 가며 3장을 채운다.
+function distinctOptions(ans, pool, more) {
+  const keys = new Set([JSON.stringify(ans)]);
+  const out = [{ v: ans, ok: true }];
+  const push = (v) => {
+    const k = JSON.stringify(v);
+    if (keys.has(k)) return;
+    keys.add(k);
+    out.push({ v, ok: false });
+  };
+  for (const c of pool) { if (out.length >= 3) break; push(c); }
+  for (let i = 0; i < 80 && out.length < 3; i++) push(more());
+  return shuffle(out);
+}
+
+// ---------------------------------------------------------------------------
+// 시점 — 앞 → 옆 → 위 순환. 손을 크게 휘두를 때마다 한 칸씩 돈다.
+// ---------------------------------------------------------------------------
+const VIEWS = [
+  { key: "front", label: "앞에서 본 모습" },
+  { key: "side", label: "옆에서 본 모습" },
+  { key: "top", label: "위에서 본 모습" },
+];
+
+function genRound(level) {
+  if (level === 1) {
+    // ⭐1 — 위에서 본 모양만. 층수와 상관없이 "블록이 놓인 자리"만 보면 되므로
+    // 세 방향 중 가장 직관적이다. 입체도 2층까지, 개수도 적게 만든다.
+    const g = makeSolid(2, 4, 7);
+    const ans = topView(g);
+    return {
+      g, kind: "shape", askKey: "top",
+      ask: "「위에서 본 모양」은 어느 것일까요?",
+      hint: "손을 휘둘러 「위에서 본 모습」으로 바꾸면 바로 보여요",
+      options: distinctOptions(ans, [frontView(g), sideView(g)], () => perturb(ans)),
+    };
+  }
+  if (level === 2) {
+    // ⭐2 — 쌓기나무 개수. 위에서 본 모습에 층수가 적혀 나오므로 더하기만 하면 된다.
+    const g = makeSolid(3, 6, 11);
+    const n = cubeCount(g);
+    const wrongs = new Set();
+    for (let i = 0; i < 80 && wrongs.size < 2; i++) {
+      const d = randInt(1, 3) * (Math.random() < 0.5 ? -1 : 1);
+      if (n + d > 0) wrongs.add(n + d);
+    }
+    return {
+      g, kind: "count", askKey: "top",
+      ask: "쌓기나무는 모두 몇 개일까요?",
+      hint: "「위에서 본 모습」으로 바꾸면 칸마다 층수가 적혀 있어요",
+      options: distinctOptions(n, [...wrongs], () => n + randInt(1, 4) * (Math.random() < 0.5 ? -1 : 1)),
+    };
+  }
+  // ⭐3 — 앞·옆에서 본 모양, 또는 층수 표
+  const g = makeSolid(3, 6, 13);
+  if (Math.random() < 0.6) {
+    const front = Math.random() < 0.5;
+    const ans = front ? frontView(g) : sideView(g);
+    const other = front ? sideView(g) : frontView(g);
+    return {
+      g, kind: "shape", askKey: front ? "front" : "side",
+      ask: `「${front ? "앞" : "옆"}에서 본 모양」은 어느 것일까요?`,
+      hint: "손을 휘둘러 그 방향으로 돌려 놓고 비교해 보세요",
+      options: distinctOptions(ans, [other, topView(g)], () => perturb(ans)),
+    };
+  }
+  const ans = topNumbers(g);
+  return {
+    g, kind: "numbers", askKey: "top",
+    ask: "「위에서 본 모양에 층수를 적은 표」는?",
+    hint: "각 자리에 나무가 몇 개 쌓였는지 세어 보세요",
+    options: distinctOptions(ans, [], () => perturb(ans)),
+  };
+}
+
+const poseTracker = new PoseTracker();
+const motion = new PoseMotion();
+let pointerInput = null;
+
+async function init() {
+  if (!isMuted()) bgm.play(showSoundHint);
+  if (mode === "motion") {
+    try {
+      await startCamera(video, { width: 640, height: 480 });
+      if (!isMuted()) bgm.play(showSoundHint);
+    } catch (e) {
+      document.getElementById("loadingText").textContent = "⚠️ 카메라를 찾을 수 없어요. 카메라 권한을 확인해주세요.";
+      return;
+    }
+    document.getElementById("loadingText").textContent = "AI 모델을 불러오는 중…";
+    await poseTracker.init();
+  } else {
+    pointerInput = new PointerInput(canvas);
+  }
+  document.getElementById("loadingPanel").style.display = "none";
+
+  await showRuleCard({
+    unit: UNIT,
+    title: "쌓기나무 관제탑",
+    lines: [
+      "쌓기나무를 <b>여러 방향에서</b> 살펴보는 게임이에요!",
+      mode === "motion"
+        ? "<b>한 손을 좌우로 크게 휘두르면</b> 돌아가요. <b>앞 → 옆 → 위</b> 순서!"
+        : "<b>🔄 돌리기 버튼</b>을 누르면 돌아가요. <b>앞 → 옆 → 위</b> 순서!",
+      "돌려 보고 나서, 아래 <b>카드 3장</b> 중 맞는 것을 고르세요.",
+      "고를 카드 위에 <b>손을 잠깐 올려두면</b> 선택돼요.",
+    ],
+  });
+
+  document.getElementById("raiseIcon").textContent = mode === "motion" ? "🙋" : "👆";
+  document.getElementById("raiseText").textContent = mode === "motion" ? "손을 들어 주세요!" : "화면을 터치(클릭)하면 시작!";
+  document.getElementById("raisePanel").style.display = "flex";
+  state = "raise";
+  requestAnimationFrame(loop);
+}
+
+let state = "loading";
+const holdFill = document.getElementById("holdFill");
+const startGate = new StartGate(mode, holdFill);
+
+let autoDiff, count, playEndAt;
+let round = null, roundAt, resolving;
+let cards = [], hoverIdx = -1, judgedIdx = -1, judgedOk = false;
+let viewIdx = 0, spinFrom = 0, spinAt = 0;
+let lastSpinAt = 0;
+let confetti = [], sparks = [];
+const shake = new ScreenShake();
+let recorder, comboShot, fallbackShot, autoRec, recordedBlob = null;
+const recIndicator = document.getElementById("recIndicator");
+let cursors = [];
+let lastFrameAt = 0;
+
+// 카드는 손이 닿으면 즉시 선택된다. 예전에는 0.9초 올려두고 기다렸는데,
+// 그 대기 시간 동안 몸이 완전히 멈춰 버려서 체육 활동이 아니게 됐다.
+const ROUND_MS = 11000;      // 이 안에 못 고르면 놓침 — 시간 압박이 있어야 리듬이 산다
+const NEXT_MS = 600;
+// 어깨 너비/초 — 이보다 빠르게 손이 지나가면 "휘둘렀다".
+// 너무 높게 잡으면 힘껏 휘둘러도 안 돌아가서 아이가 포기한다.
+const SPIN_SPEED = 1.15;
+const SPIN_COOLDOWN = 450;
+
+function rotateBtn() {
+  const { w, h } = dims;
+  const r = fluidPx(dims, 40, { min: 30, max: 56 });
+  return { x: w * 0.12, y: h * 0.44, r };
+}
+
+function layoutCards() {
+  const { w, h } = dims;
+  const n = round.options.length;
+  const cw = Math.min(w * 0.27, h * 0.24);
+  const gap = (w - cw * n) / (n + 1);
+  cards = round.options.map((o, i) => ({
+    ...o,
+    x: gap * (i + 1) + cw * (i + 0.5),
+    y: h * 0.81,
+    w: cw, h: cw * 0.92,
+  }));
+}
+
+function newRound() {
+  round = genRound(autoDiff.level);
+  layoutCards();
+  hoverIdx = -1;
+  judgedIdx = -1; judgedOk = false;
+  viewIdx = 0; spinFrom = 0; spinAt = 0;
+  resolving = false;
+  motion.reset();
+  roundAt = performance.now();
+}
+
+function startCountdown() {
+  state = "countdown";
+  document.getElementById("countdownPanel").style.display = "flex";
+  const numEl = document.getElementById("countNum");
+  let n = 3;
+  numEl.textContent = n;
+  if (!isMuted()) sound.countBeep();
+  const iv = setInterval(() => {
+    n--;
+    if (n <= 0) {
+      clearInterval(iv);
+      document.getElementById("countdownPanel").style.display = "none";
+      if (!isMuted()) sound.go();
+      beginPlay();
+    } else {
+      numEl.textContent = n;
+      if (!isMuted()) sound.countBeep();
+    }
+  }, 700);
+}
+
+function beginPlay() {
+  state = "playing";
+  const prev = HighScore.get(UNIT);
+  autoDiff = new AutoDifficulty(levelFromUrl(AutoDifficulty.startLevelFromHighScore(prev)));
+  count = 0;
+  party.reset();
+  confetti = []; sparks = [];
+  playEndAt = performance.now() + 60000;
+  lastFrameAt = 0;
+  newRound();
+
+  recorder = new ClipRecorder(canvas, sound, 24);
+  recorder.prepare();
+  comboShot = new ComboShot(canvas);
+  fallbackShot = new ComboShot(canvas);
+  autoRec = scheduleAutoRecording(recorder, {
+    onStartVisual: () => {
+      recIndicator.style.display = "flex";
+      setTimeout(() => { if (!comboShot.captured) fallbackShot.capture(canvas); }, 1500);
+    },
+    onEndVisual: () => { recIndicator.style.display = "none"; },
+    onDone: (blob) => { recordedBlob = blob; },
+    fallbackMs: 8000,
+  });
+}
+
+function spin(dir) {
+  const now = performance.now();
+  if (now - lastSpinAt < SPIN_COOLDOWN) return;
+  lastSpinAt = now;
+  spinFrom = viewIdx;
+  viewIdx = (viewIdx + (dir > 0 ? 1 : VIEWS.length - 1)) % VIEWS.length;
+  spinAt = now;
+  if (!isMuted()) sound.swoosh();
+}
+
+function choose(i) {
+  resolving = true;
+  judgedIdx = i;
+  const c = cards[i];
+  judgedOk = c.ok;
+  if (c.ok) {
+    count++;
+    const spurt = playEndAt - performance.now() < 10000;
+    party.correct(c.x, c.y, { base: 11 * (spurt ? 2 : 1), elapsedMs: performance.now() - roundAt });
+    if (party.combo > 0 && party.combo === party.maxCombo) comboShot.capture(canvas);
+    autoDiff.reportCorrect();
+    autoRec.trigger();
+    shake.trigger(9, 220);
+    if (!isMuted()) sound.hit("perfect");
+    spawnSparkles(sparks, c.x, c.y, 30, ["#fff", PARTY.gold, CUTE.green]);
+    if (party.combo > 0 && party.combo % 5 === 0) {
+      spawnConfetti(confetti, c.x, c.y - 60, 44);
+      if (!isMuted()) sound.fever();
+    }
+  } else {
+    party.wrong(c.x, c.y, "돌려서 다시 봐요!");
+    autoDiff.reportWrong();
+    shake.trigger(6, 170);
+    if (!isMuted()) sound.wrong();
+  }
+  setTimeout(() => { if (state === "playing") newRound(); }, NEXT_MS);
+}
+
+function endGame() {
+  state = "result";
+  const { medal, label } = medalFor(count, MEDALS);
+  const prev = HighScore.get(UNIT);
+  const best = Math.max(count, prev ? prev.count : 0);
+  if (!prev || count >= prev.count) {
+    HighScore.set(UNIT, { count, bestLevel: autoDiff.level, label: `${medal} ${count}${RECORD_SUFFIX}`, at: Date.now() });
+  }
+  renderPodium({ unit: UNIT, medal, label, coins: party.coins, maxCombo: party.maxCombo, count, suffix: RECORD_SUFFIX, best });
+
+  document.getElementById("statCount").textContent = count + "개";
+  document.getElementById("statBest").textContent = best + "개";
+  document.getElementById("statCombo").textContent = "🔥" + party.maxCombo;
+
+  const shot = comboShot.captured ? comboShot : fallbackShot;
+  const previewVideo = document.getElementById("previewVideo");
+  const saveVideoBtn = document.getElementById("saveVideoBtn");
+  if (recordedBlob) {
+    previewVideo.src = URL.createObjectURL(recordedBlob);
+    previewVideo.style.display = "block";
+    saveVideoBtn.style.display = "inline-block";
+  }
+  document.getElementById("savePhotoBtn").onclick = async () => {
+    const blob = await shot.toBlob((c, w, h) => drawPhotoOverlay(c, w, h, { title: TITLE, record: count + RECORD_SUFFIX, medal }));
+    downloadBlob(blob, `수학체육올림픽6_쌓기나무관제탑_${formatFileTimestamp()}.png`);
+  };
+  document.getElementById("saveVideoBtn").onclick = () => {
+    if (recordedBlob) downloadBlob(recordedBlob, `수학체육올림픽6_쌓기나무관제탑_${formatFileTimestamp()}.${recorder.extension}`);
+  };
+  document.getElementById("resultPanel").style.display = "flex";
+  if (!isMuted()) sound.success();
+}
+
+document.getElementById("retryBtn").addEventListener("click", () => {
+  document.getElementById("resultPanel").style.display = "none";
+  document.getElementById("raisePanel").style.display = "flex";
+  startGate.since = 0; startGate.ready = false; holdFill.style.width = "0%";
+  state = "raise";
+});
+
+document.getElementById("raisePanel").addEventListener("click", () => {
+  if (state === "raise" && mode !== "motion") goReady();
+});
+
+function goReady() {
+  state = "ready";
+  document.getElementById("raisePanel").style.display = "none";
+  document.getElementById("readyPanel").style.display = "flex";
+  if (!isMuted()) sound.click();
+  setTimeout(() => {
+    document.getElementById("readyPanel").style.display = "none";
+    startCountdown();
+  }, 500);
+}
+
+// ── 쌓기나무 그리기 ──
+//
+// 45도 아이소메트릭으로 그리면 화면에 보이는 실루엣이 교과서의 "앞에서 본 모양"
+// (= 각 열의 가장 높은 층수)과 어긋난다. 아이소메트릭에서는 가로 위치가 열(c)이 아니라
+// (c - r)로 정해지기 때문이다. 그래서 여기서는 <사입체(캐비닛) 투영>을 쓴다 —
+// 앞면은 정면 그대로 두고 안쪽(행 r)만 오른쪽 위로 밀어 낸다.
+// 그러면 화면에 보이는 앞모습 실루엣이 frontView()의 결과와 정확히 같아진다.
+function drawCube(ctx, x, y, cw, ch, dx, dy, shade) {
+  // 윗면 (안쪽으로 밀린 평행사변형)
+  ctx.beginPath();
+  ctx.moveTo(x, y - ch);
+  ctx.lineTo(x + dx, y - ch + dy);
+  ctx.lineTo(x + cw + dx, y - ch + dy);
+  ctx.lineTo(x + cw, y - ch);
+  ctx.closePath();
+  ctx.fillStyle = shade.top; ctx.fill(); ctx.stroke();
+  // 오른쪽 옆면
+  ctx.beginPath();
+  ctx.moveTo(x + cw, y - ch);
+  ctx.lineTo(x + cw + dx, y - ch + dy);
+  ctx.lineTo(x + cw + dx, y + dy);
+  ctx.lineTo(x + cw, y);
+  ctx.closePath();
+  ctx.fillStyle = shade.right; ctx.fill(); ctx.stroke();
+  // 앞면 — 이 면들이 모여 "앞에서 본 모양"이 된다
+  ctx.beginPath();
+  ctx.rect(x, y - ch, cw, ch);
+  ctx.fillStyle = shade.front; ctx.fill(); ctx.stroke();
+}
+
+function drawSolid(ctx, g, cx, cy, unit) {
+  const cw = unit * 1.5, ch = unit * 1.5;
+  const dx = unit * 0.62, dy = -unit * 0.45;
+  const shade = { front: "#3bc9db", top: "#a5e8f0", right: "#0b9aad" };
+  const x0 = cx - (N * cw) / 2 - ((N - 1) * dx) / 2;
+  const y0 = cy + ((N - 1) * -dy) / 2;
+  ctx.save();
+  ctx.strokeStyle = CUTE.ink;
+  ctx.lineWidth = Math.max(2, unit * 0.11);
+  ctx.lineJoin = "round";
+  // 뒤쪽 행(r이 큰 쪽)부터 그려야 앞줄이 뒷줄을 가린다
+  for (let r = N - 1; r >= 0; r--) {
+    for (let k = 0; k < MAXH; k++) {
+      for (let c = 0; c < N; c++) {
+        if (g[r][c] <= k) continue;
+        const x = x0 + c * cw + r * dx;
+        const y = y0 - k * ch + r * dy;
+        drawCube(ctx, x, y, cw, ch, dx, dy, shade);
+      }
+    }
+  }
+  ctx.restore();
+}
+
+// ── 위에서 본 모습 (바둑판) ──
+function drawTopDown(ctx, g, cx, cy, cell, withNumbers) {
+  const x0 = cx - (cell * N) / 2, y0 = cy - (cell * N) / 2;
+  ctx.save();
+  ctx.strokeStyle = CUTE.ink;
+  ctx.lineWidth = Math.max(2, cell * 0.07);
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      const filled = g[r][c] > 0;
+      ctx.fillStyle = filled ? "#3bc9db" : "rgba(255,255,255,0.35)";
+      ctx.beginPath();
+      ctx.roundRect(x0 + c * cell + cell * 0.06, y0 + r * cell + cell * 0.06, cell * 0.88, cell * 0.88, cell * 0.16);
+      ctx.fill(); ctx.stroke();
+      if (withNumbers && filled) {
+        drawChunkyText(ctx, String(g[r][c]), x0 + c * cell + cell * 0.5, y0 + r * cell + cell * 0.5,
+          cell * 0.44, "#fff", { outline: CUTE.ink, outlineWidth: Math.max(2, cell * 0.09) });
+      }
+    }
+  }
+  ctx.restore();
+}
+
+// ── 3x3 표 하나 (보기 카드 안에 들어간다) ──
+function drawGrid(ctx, v, cx, cy, cell, numbers) {
+  const rows = v.length, cols = v[0].length;
+  const x0 = cx - (cell * cols) / 2, y0 = cy - (cell * rows) / 2;
+  ctx.save();
+  ctx.strokeStyle = CUTE.ink;
+  ctx.lineWidth = Math.max(1.6, cell * 0.08);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const val = v[r][c];
+      const filled = val > 0;
+      ctx.fillStyle = filled ? CUTE.green : "rgba(255,255,255,0.5)";
+      ctx.beginPath();
+      ctx.roundRect(x0 + c * cell + cell * 0.07, y0 + r * cell + cell * 0.07, cell * 0.86, cell * 0.86, cell * 0.18);
+      ctx.fill(); ctx.stroke();
+      if (numbers && filled) {
+        drawChunkyText(ctx, String(val), x0 + c * cell + cell * 0.5, y0 + r * cell + cell * 0.5,
+          cell * 0.46, "#fff", { outline: CUTE.ink, outlineWidth: Math.max(1.6, cell * 0.1) });
+      }
+    }
+  }
+  ctx.restore();
+}
+
+// ── 보기 카드 ──
+function drawCards(ctx) {
+  for (let i = 0; i < cards.length; i++) {
+    const c = cards[i];
+    const judged = i === judgedIdx;
+    const hot = i === hoverIdx && !resolving;
+    const fill = judged ? (judgedOk ? CUTE.green : CUTE.red) : CUTE.cream;
+    drawStickerRect(ctx, c.x, c.y, c.w, c.h, c.w * 0.14, fill,
+      { lineWidth: Math.max(3, c.w * 0.045), drop: c.w * 0.05 });
+    if (round.kind === "count") {
+      drawChunkyText(ctx, `${c.v}개`, c.x, c.y, c.h * 0.42, judged ? "#fff" : CUTE.ink,
+        { outline: judged ? CUTE.ink : "#fff", outlineWidth: Math.max(3, c.h * 0.09) });
+    } else {
+      drawGrid(ctx, c.v, c.x, c.y, Math.min(c.w, c.h) * 0.27, round.kind === "numbers");
+    }
+    // 손이 올라온 카드는 금색 테두리로 알려 준다 (닿는 순간 선택된다)
+    if (hot) {
+      ctx.save();
+      ctx.strokeStyle = PARTY.gold;
+      ctx.lineWidth = Math.max(4, c.w * 0.055);
+      ctx.strokeRect(c.x - c.w / 2 - 4, c.y - c.h / 2 - 4, c.w + 8, c.h + 8);
+      ctx.restore();
+    }
+  }
+}
+
+function loop(tsMs) {
+  requestAnimationFrame(loop);
+  if (mode === "motion" && video.readyState < 2) return;
+  const { ctx, w, h } = dims;
+  ctx.save();
+  shake.apply(ctx);
+  if (mode === "motion") drawMirroredVideo(ctx, video, w, h);
+  else drawPartyBackdrop(ctx, dims);
+  drawDrifters(ctx, drifters, dims, 1 / 60);
+  drawBunting(ctx, dims);
+  drawCrowd(ctx, dims, party.cheerUntil);
+
+  let result = null;
+  if (mode === "motion") {
+    result = poseTracker.detect(video, tsMs);
+    motion.push(tsMs, posePoints(result), w, h, video);
+    if (state === "raise") {
+      if (startGate.update(tsMs, isArmRaised(posePoints(result)))) goReady();
+    }
+  }
+  cursors = getCursors(mode, result, w, h, video, pointerInput);
+
+  if (state === "playing") stepGame();
+
+  if (mode === "motion") {
+    const f = motion.last;
+    if (f) {
+      const r = fluidPx(dims, 24, { min: 17, max: 34 });
+      // 고르는 손(더 높이 든 손)은 크게, 나머지는 작게 — 어느 손이 커서인지 헷갈리지 않게
+      const pickHand = f.lw.y < f.rw.y ? "lw" : "rw";
+      for (const k of ["lw", "rw"]) {
+        drawSticker(ctx, f[k].x, f[k].y, k === pickHand ? r : r * 0.66,
+          k === pickHand ? PARTY.gold : "rgba(255,255,255,0.7)",
+          { lineWidth: Math.max(3, r * 0.15) });
+      }
+    } else if (state === "playing") {
+      drawChunkyText(ctx, "카메라에 몸이 보이게 물러서 주세요!", w * 0.5, h * 0.5,
+        fluidPx(dims, 22, { min: 16, max: 30 }), "#fff",
+        { outline: CUTE.ink, outlineWidth: fluidPx(dims, 6, { min: 4, max: 8 }) });
+    }
+  } else {
+    for (const c of cursors) drawGloveCursor(ctx, c.x, c.y, fluidPx(dims, 44, { min: 32, max: 62 }), { active: !resolving });
+  }
+  ctx.restore();
+}
+
+// 지금 커서 위치 (모션은 더 높이 든 손)
+function cursorPoint() {
+  if (mode === "motion") {
+    const f = motion.last;
+    if (!f) return null;
+    return f.lw.y < f.rw.y ? f.lw : f.rw;
+  }
+  return cursors[0] || null;
+}
+
+function stepGame() {
+  const { ctx, w, h } = dims;
+  const dt = lastFrameAt ? Math.min(0.06, (performance.now() - lastFrameAt) / 1000) : 1 / 60;
+  lastFrameAt = performance.now();
+  const remain = Math.max(0, playEndAt - performance.now());
+  if (remain <= 0) { endGame(); return; }
+  const now = performance.now();
+
+  // ── 돌리기 ──
+  if (!resolving) {
+    if (mode === "motion") {
+      const sw = motion.swing();
+      // 가로로 크게 지나갈 때만 — 카드를 고르려 손을 옮기는 움직임과 구분한다
+      if (sw && sw.speed > SPIN_SPEED && Math.abs(sw.dx) > Math.abs(sw.dy) * 1.4) spin(sw.dx > 0 ? 1 : -1);
+    } else if (pointerInput && pointerInput.consumeJustDown()) {
+      // down 상태는 한 프레임 만에 사라져서 클릭을 놓친다 — "방금 눌렀는가"로 봐야 한다
+      const b = rotateBtn(), p = cursors[0];
+      if (p && Math.hypot(p.x - b.x, p.y - b.y) <= b.r) spin(1);
+    }
+  }
+
+  // ── 카드를 손으로 치기 ──
+  const p = !resolving ? cursorPoint() : null;
+  let over = -1;
+  if (p) {
+    for (let i = 0; i < cards.length; i++) {
+      const c = cards[i];
+      if (Math.abs(p.x - c.x) <= c.w / 2 && Math.abs(p.y - c.y) <= c.h / 2) { over = i; break; }
+    }
+  }
+  hoverIdx = over;
+  if (over >= 0) {
+    // 입체를 돌리려고 팔을 크게 휘두르는 중이면 카드를 고른 것으로 보지 않는다
+    const sw = mode === "motion" ? motion.swing() : null;
+    const swinging = sw && sw.speed > SPIN_SPEED * 0.7;
+    if (!swinging) choose(over);
+  }
+  // 시간 안에 못 고르면 놓침 — 다음 문제가 바로 온다
+  if (!resolving && now - roundAt > ROUND_MS) {
+    resolving = true;
+    party.wrong(w * 0.5, h * 0.5, "시간 초과!");
+    autoDiff.reportWrong();
+    if (!isMuted()) sound.wrong();
+    setTimeout(() => { if (state === "playing") newRound(); }, NEXT_MS);
+  }
+
+  // ── 입체 ──
+  const cx = w * 0.5, cy = h * 0.44;
+  const unit = Math.min(w * 0.062, h * 0.050);
+  // 시점이 바뀌는 0.35초 동안 살짝 회전하는 느낌을 준다
+  const spinT = Math.min(1, (now - spinAt) / 350);
+  const view = VIEWS[viewIdx].key;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(0.85 + 0.15 * spinT, 1);
+  ctx.translate(-cx, -cy);
+  // 층수 숫자는 "세기"를 도와주는 발판이다. 다만 그 숫자 자체가 답인 문제(층수 표)나
+  // 어느 칸이 찼는지가 답인 문제(위에서 본 모양)에서는 답을 알려주는 셈이라 감춘다.
+  const showLayerNumbers = round.kind === "count" || round.askKey !== "top";
+  if (view === "top") drawTopDown(ctx, round.g, cx, cy, unit * 1.35, showLayerNumbers);
+  else if (view === "side") drawSolid(ctx, rotate90(round.g), cx, cy + unit * 1.9, unit);
+  else drawSolid(ctx, round.g, cx, cy + unit * 1.9, unit);
+  ctx.restore();
+
+  // 지금 어느 방향에서 보고 있는지
+  const vfs = fluidPx(dims, 20, { min: 14, max: 28 });
+  drawStickerRect(ctx, cx, h * 0.635, vfs * 10, vfs * 1.9, vfs * 0.5, PARTY.gold,
+    { lineWidth: Math.max(3, vfs * 0.16), drop: vfs * 0.2 });
+  drawChunkyText(ctx, `👁 ${VIEWS[viewIdx].label}`, cx, h * 0.635, vfs, CUTE.ink,
+    { outline: "#fff", outlineWidth: Math.max(2.5, vfs * 0.16) });
+
+  // 터치·마우스용 돌리기 버튼
+  if (mode !== "motion") {
+    const b = rotateBtn();
+    drawSticker(ctx, b.x, b.y, b.r, CUTE.cream, { lineWidth: Math.max(3, b.r * 0.14) });
+    drawChunkyText(ctx, "🔄", b.x, b.y, b.r * 0.9, CUTE.ink, { outline: "#fff", outlineWidth: 2 });
+    drawChunkyText(ctx, "돌리기", b.x, b.y + b.r * 1.35, b.r * 0.38, "#fff",
+      { outline: CUTE.ink, outlineWidth: Math.max(3, b.r * 0.11) });
+  }
+
+  // 이 문제에 남은 시간 띠
+  if (!resolving) {
+    const t = Math.max(0, 1 - (now - roundAt) / ROUND_MS);
+    const bw = w * 0.5, bh = fluidPx(dims, 9, { min: 6, max: 13 });
+    const bx = w * 0.5, by = h * 0.735;
+    drawStickerRect(ctx, bx, by, bw, bh, bh / 2, "rgba(255,255,255,0.8)", { lineWidth: 2, drop: 0 });
+    ctx.save();
+    ctx.fillStyle = t < 0.3 ? CUTE.red : PARTY.gold;
+    ctx.beginPath();
+    ctx.roundRect(bx - bw / 2, by - bh / 2, Math.max(bh, bw * t), bh, bh / 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  drawCards(ctx);
+
+  const br = fluidPx(dims, 22, { min: 16, max: 30 });
+  drawMascot(ctx, w * 0.95, h * 0.40, br, CHAR, party.currentMood(remain));
+
+  const hudBottom = party.drawHud(ctx, dims, { remainMs: remain, count, suffix: "개" });
+
+  drawCuteBanner(ctx, dims, [
+    { text: round.ask, size: 23, chunky: true, color: PARTY.gold },
+    { text: round.hint, size: 14, color: CUTE.ink },
+  ], fluidPx, { top: hudBottom });
+
+  if (remain < 10000) {
+    const fs2 = fluidPx(dims, 22, { min: 16, max: 30 });
+    const puls = 1 + Math.sin(now / 120) * 0.08;
+    ctx.save(); ctx.translate(w * 0.5, h * 0.70); ctx.scale(puls, puls);
+    drawChunkyText(ctx, "🔥 라스트 스퍼트! 코인 2배", 0, 0, fs2, CUTE.red,
+      { outline: "#fff", outlineWidth: Math.max(4, fs2 * 0.24) });
+    ctx.restore();
+  }
+  drawChunkyText(ctx,
+    mode === "motion" ? "손을 휘둘러 돌려 보고 · 카드를 손으로 치면 선택!" : "🔄로 돌려 보고 · 카드를 누르면 선택!",
+    w * 0.5, h * 0.965, fluidPx(dims, 15, { min: 11, max: 20 }), "#fff",
+    { outline: CUTE.ink, outlineWidth: fluidPx(dims, 5, { min: 3.5, max: 7 }) });
+
+  party.update(dt);
+  confetti = updateConfetti(confetti, dt); drawConfetti(ctx, confetti);
+  sparks = updateSparkles(sparks, dt); drawSparkles(ctx, sparks);
+  party.drawFx(ctx, dims);
+  party.drawFeverFrame(ctx, dims);
+
+  drawVignette(ctx, w, h, 0.16);
+  drawLevelStars(ctx, dims, autoDiff.level, fluidPx);
+}
+
+// 바닥 표를 90° 돌린다 — "옆에서 본 모습"은 돌려 세운 같은 입체다
+function rotate90(g) {
+  const out = [];
+  for (let r = 0; r < N; r++) {
+    out.push([]);
+    for (let c = 0; c < N; c++) out[r].push(g[N - 1 - c][r]);
+  }
+  return out;
+}
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,719 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>원 과녁 샤프슈터 · 종목 5</title>
+<link rel="stylesheet" href="../css/style.css?v=6">
+</head>
+<body>
+
+<div class="game-stage">
+  <video id="video" playsinline muted style="display:none"></video>
+  <canvas id="gameCanvas"></canvas>
+
+  <div class="hud">
+    <div class="rec" id="recIndicator" style="display:none"><span class="dot"></span>REC</div>
+    <button class="home-btn" id="homeBtn">🏠</button>
+  </div>
+
+  <div class="overlay-panel" id="loadingPanel">
+    <h2>🏹 원 과녁 샤프슈터</h2>
+    <p id="loadingText">준비 중…</p>
+  </div>
+
+  <div class="overlay-panel" id="rulePanel" style="display:none">
+    <div class="rule-card">
+      <div class="rule-head">
+        <div class="rule-char">🦌</div>
+        <div>
+          <div class="rule-name">샤프</div>
+          <h2 class="rule-title">원 과녁 샤프슈터</h2>
+        </div>
+      </div>
+      <p class="rule-cheer"></p>
+      <ul class="rule-list"></ul>
+      <div class="rule-timer"><div class="rule-timer-fill"></div></div>
+      <button class="rule-go">좋아, 시작!</button>
+    </div>
+  </div>
+
+  <div class="overlay-panel" id="raisePanel" style="display:none">
+    <div class="raise-icon" id="raiseIcon">🙋</div>
+    <h2 id="raiseText">손을 들어 주세요!</h2>
+    <div class="hold-bar"><div class="hold-fill" id="holdFill"></div></div>
+  </div>
+
+  <div class="overlay-panel ready-flash" id="readyPanel" style="display:none">
+    <h2>✋ 좋아요! 준비됐어요</h2>
+  </div>
+
+  <div class="overlay-panel" id="countdownPanel" style="display:none">
+    <div class="countdown-num" id="countNum">3</div>
+  </div>
+
+  <div class="overlay-panel" id="resultPanel" style="display:none">
+    <div id="podium"></div>
+    <div class="result-stats">
+      <div class="stat-box"><div class="num" id="statCount">0발</div><div class="label">명중한 정답</div></div>
+      <div class="stat-box"><div class="num" id="statBest">0발</div><div class="label">최고 기록</div></div>
+      <div class="stat-box"><div class="num" id="statCombo">0</div><div class="label">최고 콤보</div></div>
+    </div>
+    <video class="preview" id="previewVideo" controls playsinline style="display:none"></video>
+    <div class="action-row">
+      <button class="ghost-btn" id="savePhotoBtn">📸 사진</button>
+      <button class="ghost-btn" id="saveVideoBtn" style="display:none">🎬 3초 영상</button>
+      <button class="big-btn" id="retryBtn">🔁 한 번 더</button>
+      <button class="ghost-btn" id="homeBtn2">🏠 종목 선택</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import {
+  HighScore, requestWakeLock, SoundKit, FileAudioLoop,
+  ClipRecorder, downloadBlob,
+  drawMirroredVideo, fitCanvasToScreen, getCursors,
+  PoseTracker, PoseMotion, posePoints, isArmRaised,
+  AutoDifficulty, levelFromUrl, medalFor,
+  scheduleAutoRecording, ComboShot, drawPhotoOverlay,
+  ScreenShake, InputMode, PointerInput, StartGate,
+  startCamera, formatFileTimestamp, fluidPx, showSoundHint,
+  drawVignette, spawnConfetti, updateConfetti, drawConfetti,
+} from "../js/engine.js?v=4";
+import {
+  CUTE, drawSticker, drawStickerRect, drawChunkyText,
+  spawnSparkles, updateSparkles, drawSparkles, makeDrifters, drawDrifters,
+  drawBunting, drawGloveCursor, drawLevelStars, drawCuteBanner,
+} from "../js/cute.js?v=7";
+import {
+  PARTY, CHARACTERS, Party, drawPartyBackdrop, drawCrowd, drawMascot,
+  showRuleCard, renderPodium, irisTransition,
+} from "../js/party.js?v=2";
+requestWakeLock();
+
+const UNIT = "n5";
+const TITLE = "원 과녁 샤프슈터";
+const RECORD_SUFFIX = "발 명중";
+const MEDALS = { bronze: 3, silver: 6, gold: 9 };
+const CHAR = CHARACTERS[UNIT];
+const mode = InputMode.get();
+const PI = 3.14;
+
+const video = document.getElementById("video");
+const canvas = document.getElementById("gameCanvas");
+let dims = fitCanvasToScreen(canvas);
+let drifters = makeDrifters(10, dims.w, dims.h);
+window.addEventListener("resize", () => {
+  dims = fitCanvasToScreen(canvas);
+  drifters = makeDrifters(10, dims.w, dims.h);
+  if (round) layoutBalloons();
+});
+
+const sound = new SoundKit();
+const bgm = new FileAudioLoop("../assets/sounds/subbgm.mp3", 0.32);
+const isMuted = () => localStorage.getItem("smo_muted") === "1";
+const party = new Party({ unit: UNIT, sound, isMuted });
+
+function goHome() { bgm.stop(); irisTransition(() => { location.href = "../index.html"; }); }
+document.getElementById("homeBtn").addEventListener("click", goHome);
+document.getElementById("homeBtn2").addEventListener("click", goHome);
+
+function randInt(min, max) { return min + Math.floor(Math.random() * (max - min + 1)); }
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function fmt(v) { return Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/\.?0+$/, ""); }
+
+// 과녁의 동심원.
+// 처음엔 교과서 예시대로 10·20·30·40 cm를 썼는데, 바깥 링(40)이 가장 맞히기 쉬운 자리라
+// 겨냥이 서툰 아이일수록 40×40×3.14=5024 같은 큰 수를 만나게 되는 문제가 있었다.
+// 반지름을 5·10·15·20으로 낮춰 어떤 링에 맞아도 계산이 감당되게 한다.
+const RINGS = [5, 10, 15, 20];
+
+// ---------------------------------------------------------------------------
+// 문제 만들기
+//
+// 오답은 아이들이 실제로 하는 실수를 그대로 흉내 낸다 —
+// 넓이 자리에 원주 공식을 쓰거나(2×r×3.14), 3.14를 한 번만 곱하거나,
+// 지름을 반지름 자리에 넣는 것.
+// ---------------------------------------------------------------------------
+function genQuiz(level, r) {
+  if (level === 1) {
+    // 원주 = 지름 x 3.14
+    const ans = +(2 * r * PI).toFixed(2);
+    return {
+      q: `반지름 ${r} cm 원의 <원주>는?`,
+      sub: `${2 * r} × 3.14 = ?`,
+      formula: "원주 = 지름 × 3.14",
+      ans, unitText: "cm",
+      wrongs: [+(r * PI).toFixed(2), +(r * r * PI).toFixed(2)],
+    };
+  }
+  if (level === 2) {
+    // 원의 넓이 = 반지름 x 반지름 x 3.14
+    const ans = +(r * r * PI).toFixed(2);
+    return {
+      q: `반지름 ${r} cm 원의 <넓이>는?`,
+      sub: `${r} × ${r} × 3.14 = ?`,
+      formula: "넓이 = 반지름 × 반지름 × 3.14",
+      ans, unitText: "cm²",
+      wrongs: [+(2 * r * PI).toFixed(2), +(2 * r * 2 * r * PI).toFixed(2)],
+    };
+  }
+  // ⭐3 도넛 구역 — 맞힌 링과 그 안쪽 링 사이의 넓이
+  const idx = RINGS.indexOf(r);
+  const inner = idx > 0 ? RINGS[idx - 1] : 0;
+  if (inner === 0) {
+    const ans = +(r * r * PI).toFixed(2);
+    return {
+      q: `한가운데 반지름 ${r} cm 원의 <넓이>는?`,
+      sub: `${r} × ${r} × 3.14 = ?`,
+      formula: "넓이 = 반지름 × 반지름 × 3.14",
+      ans, unitText: "cm²",
+      wrongs: [+(2 * r * PI).toFixed(2), +(r * PI).toFixed(2)],
+    };
+  }
+  const ans = +((r * r - inner * inner) * PI).toFixed(2);
+  return {
+    q: `반지름 ${inner} cm와 ${r} cm 사이 <고리 구역의 넓이>는?`,
+    sub: `(${r}×${r} − ${inner}×${inner}) × 3.14 = ?`,
+    formula: "고리 넓이 = (큰 원 넓이) − (작은 원 넓이)",
+    ans, unitText: "cm²",
+    // 빼는 것을 잊거나, 반지름끼리 먼저 빼고 제곱하는 실수
+    wrongs: [+(r * r * PI).toFixed(2), +((r - inner) * (r - inner) * PI).toFixed(2)],
+  };
+}
+
+const poseTracker = new PoseTracker();
+const motion = new PoseMotion();
+let pointerInput = null;
+
+async function init() {
+  if (!isMuted()) bgm.play(showSoundHint);
+  if (mode === "motion") {
+    try {
+      await startCamera(video, { width: 640, height: 480 });
+      if (!isMuted()) bgm.play(showSoundHint);
+    } catch (e) {
+      document.getElementById("loadingText").textContent = "⚠️ 카메라를 찾을 수 없어요. 카메라 권한을 확인해주세요.";
+      return;
+    }
+    document.getElementById("loadingText").textContent = "AI 모델을 불러오는 중…";
+    await poseTracker.init();
+  } else {
+    pointerInput = new PointerInput(canvas);
+  }
+  document.getElementById("loadingPanel").style.display = "none";
+
+  await showRuleCard({
+    unit: UNIT,
+    title: "원 과녁 샤프슈터",
+    lines: [
+      "문제를 풀고, <b>답이 적힌 풍선</b>을 활로 쏘면 돼요!",
+      "풍선은 <b>좌우로 흘러가요.</b> 화면 밖으로 나가기 전에 쏘세요.",
+      mode === "motion"
+        ? "<b>앞손으로 겨누고</b>, 뒷손을 <b>뒤로 당겼다 놓으면</b> 발사!"
+        : "<b>겨눈 곳을 눌렀다 떼면</b> 발사!",
+      "<b>연속으로 맞힐수록 풍선이 빨라져요.</b> 마지막 10초엔 코인 2배!",
+    ],
+  });
+
+  document.getElementById("raiseIcon").textContent = mode === "motion" ? "🙋" : "👆";
+  document.getElementById("raiseText").textContent = mode === "motion" ? "손을 들어 주세요!" : "화면을 터치(클릭)하면 시작!";
+  document.getElementById("raisePanel").style.display = "flex";
+  state = "raise";
+  requestAnimationFrame(loop);
+}
+
+let state = "loading";
+const holdFill = document.getElementById("holdFill");
+const startGate = new StartGate(mode, holdFill);
+
+let autoDiff, count, playEndAt;
+let round = null, roundAt, resolving = false;
+let balloons = [], arrow = null, judgedOk = false;
+let aim = { x: 0, y: 0 };
+let draw = 0;              // 시위를 당긴 정도 0~1
+let confetti = [], sparks = [];
+const shake = new ScreenShake();
+let recorder, comboShot, fallbackShot, autoRec, recordedBlob = null;
+const recIndicator = document.getElementById("recIndicator");
+let cursors = [];
+let lastFrameAt = 0;
+let pressSeen = false;
+function tapReleased() {
+  if (!pointerInput) return false;
+  if (pointerInput.consumeJustDown()) pressSeen = true;
+  if (pressSeen && !pointerInput.down) { pressSeen = false; return true; }
+  return false;
+}
+
+// 당김: 두 손 사이 거리(어깨 너비 배수). 이만큼 벌리면 만작으로 본다.
+const DRAW_MIN = 0.55, DRAW_FULL = 1.35;
+const RELEASE_DROP = 0.30;
+let lastDrawUnits = 0;
+const NEXT_MS = 320;   // 다음 것이 거의 바로 온다 — 끊기면 리듬이 죽는다
+
+// 연속 성공을 크게 알려 준다 — 잘하고 있다는 게 눈에 보여야 계속 몸을 쓴다
+let streakMsg = null;
+function noteStreak(n) {
+  if (n >= 3) streakMsg = { text: n >= 10 ? `🔥 ${n}연속 대단해요!` : n >= 5 ? `⚡ ${n}연속!` : `${n}연속!`, until: performance.now() + 1000 };
+}
+function drawStreak(ctx) {
+  if (!streakMsg || performance.now() > streakMsg.until) return;
+  const { w, h } = dims;
+  const fs = fluidPx(dims, 30, { min: 21, max: 42 });
+  const puls = 1 + Math.sin(performance.now() / 110) * 0.09;
+  ctx.save();
+  ctx.translate(w * 0.5, h * 0.47); ctx.scale(puls, puls);
+  drawChunkyText(ctx, streakMsg.text, 0, 0, fs, PARTY.gold,
+    { outline: CUTE.ink, outlineWidth: Math.max(4, fs * 0.22) });
+  ctx.restore();
+}
+
+function isSpurt() { return playEndAt - performance.now() < 10000; }
+// 풍선이 화면을 가로지르는 시간 — 콤보가 쌓일수록 빨라진다
+function driftMs() {
+  const base = autoDiff.level === 1 ? 8000 : autoDiff.level === 2 ? 6800 : 5600;
+  return base * Math.max(0.6, 1 - party.combo * 0.04) * (isSpurt() ? 0.85 : 1);
+}
+
+function targetCenter() { return { x: dims.w * 0.5, y: dims.h * 0.40 }; }
+function targetRadius() { return Math.min(dims.w * 0.22, dims.h * 0.17); }
+
+function layoutBalloons() {
+  if (!balloons.length) return;
+  const { h } = dims;
+  for (let i = 0; i < balloons.length; i++) balloons[i].baseY = h * (0.60 + (i % 2) * 0.11);
+}
+
+function newRound() {
+  // 예전에는 과녁을 한 번 쏴서 반지름을 정하고, 계산한 뒤 <또 한 발>을 쐈다.
+  // 한 문제에 12초씩 걸려 리듬이 죽었다. 이제 반지름은 바로 주어지고 한 발로 끝난다.
+  const r = RINGS[randInt(0, RINGS.length - 1)];
+  const quiz = genQuiz(autoDiff.level, r);
+  const opts = shuffle([{ v: quiz.ans, ok: true }, ...quiz.wrongs.map((v) => ({ v, ok: false }))]);
+  const dur = driftMs();
+  balloons = opts.map((o, i) => ({
+    ...o, baseY: 0, y: 0, r: 0, popped: false, phase: Math.random() * 6.28,
+    dir: i % 2 === 0 ? 1 : -1, at: performance.now() + i * dur * 0.10, dur,
+  }));
+  layoutBalloons();
+  round = { hitR: r, quiz };
+  resolving = false; judgedOk = false; arrow = null;
+  draw = 0; lastDrawUnits = 0;
+  motion.reset();
+  roundAt = performance.now();
+}
+
+function startCountdown() {
+  state = "countdown";
+  document.getElementById("countdownPanel").style.display = "flex";
+  const numEl = document.getElementById("countNum");
+  let n = 3;
+  numEl.textContent = n;
+  if (!isMuted()) sound.countBeep();
+  const iv = setInterval(() => {
+    n--;
+    if (n <= 0) {
+      clearInterval(iv);
+      document.getElementById("countdownPanel").style.display = "none";
+      if (!isMuted()) sound.go();
+      beginPlay();
+    } else {
+      numEl.textContent = n;
+      if (!isMuted()) sound.countBeep();
+    }
+  }, 700);
+}
+
+function beginPlay() {
+  state = "playing";
+  const prev = HighScore.get(UNIT);
+  autoDiff = new AutoDifficulty(levelFromUrl(AutoDifficulty.startLevelFromHighScore(prev)));
+  count = 0;
+  party.reset();
+  confetti = []; sparks = [];
+  playEndAt = performance.now() + 60000;
+  lastFrameAt = 0;
+  newRound();
+
+  recorder = new ClipRecorder(canvas, sound, 24);
+  recorder.prepare();
+  comboShot = new ComboShot(canvas);
+  fallbackShot = new ComboShot(canvas);
+  autoRec = scheduleAutoRecording(recorder, {
+    onStartVisual: () => {
+      recIndicator.style.display = "flex";
+      setTimeout(() => { if (!comboShot.captured) fallbackShot.capture(canvas); }, 1500);
+    },
+    onEndVisual: () => { recIndicator.style.display = "none"; },
+    onDone: (blob) => { recordedBlob = blob; },
+    fallbackMs: 8000,
+  });
+}
+
+// ── 발사 ──
+function fire() {
+  if (arrow || resolving) return;
+  arrow = { tx: aim.x, ty: aim.y, born: performance.now() };
+  draw = 0;
+  if (!isMuted()) sound.swoosh();
+  shake.trigger(5, 140);
+}
+
+function resolveArrow(x, y) {
+  arrow = null;
+  let hit = null;
+  for (const b of balloons) {
+    if (b.popped || b.y <= 0) continue;
+    if (Math.hypot(x - b.x, y - b.y) <= b.r * 1.2) { hit = b; break; }
+  }
+  if (!hit) return;                 // 빗나가면 그냥 다시 쏜다
+  hit.popped = true;
+  resolving = true;
+  judgedOk = hit.ok;
+  if (hit.ok) {
+    count++;
+    party.correct(hit.x, hit.y, { base: 12 * (isSpurt() ? 2 : 1), elapsedMs: performance.now() - roundAt });
+    if (party.combo > 0 && party.combo === party.maxCombo) comboShot.capture(canvas);
+    autoDiff.reportCorrect();
+    noteStreak(party.combo);
+    autoRec.trigger();
+    shake.trigger(10, 240);
+    if (!isMuted()) sound.hit("perfect");
+    spawnSparkles(sparks, hit.x, hit.y, 32, ["#fff", PARTY.gold, CUTE.purple]);
+    if (party.combo > 0 && party.combo % 5 === 0) {
+      spawnConfetti(confetti, hit.x, hit.y, 44);
+      if (!isMuted()) sound.fever();
+    }
+  } else {
+    party.wrong(hit.x, hit.y, "다시 계산해 봐요!");
+    autoDiff.reportWrong();
+    if (!isMuted()) sound.wrong();
+  }
+  setTimeout(() => { if (state === "playing") newRound(); }, NEXT_MS);
+}
+
+function missAll() {
+  resolving = true;
+  party.wrong(dims.w * 0.5, dims.h * 0.6, "놓쳤어요!");
+  autoDiff.reportWrong();
+  if (!isMuted()) sound.wrong();
+  setTimeout(() => { if (state === "playing") newRound(); }, NEXT_MS);
+}
+
+function endGame() {
+  state = "result";
+  const { medal, label } = medalFor(count, MEDALS);
+  const prev = HighScore.get(UNIT);
+  const best = Math.max(count, prev ? prev.count : 0);
+  if (!prev || count >= prev.count) {
+    HighScore.set(UNIT, { count, bestLevel: autoDiff.level, label: `${medal} ${count}${RECORD_SUFFIX}`, at: Date.now() });
+  }
+  renderPodium({ unit: UNIT, medal, label, coins: party.coins, maxCombo: party.maxCombo, count, suffix: RECORD_SUFFIX, best });
+
+  document.getElementById("statCount").textContent = count + "발";
+  document.getElementById("statBest").textContent = best + "발";
+  document.getElementById("statCombo").textContent = "🔥" + party.maxCombo;
+
+  const shot = comboShot.captured ? comboShot : fallbackShot;
+  const previewVideo = document.getElementById("previewVideo");
+  const saveVideoBtn = document.getElementById("saveVideoBtn");
+  if (recordedBlob) {
+    previewVideo.src = URL.createObjectURL(recordedBlob);
+    previewVideo.style.display = "block";
+    saveVideoBtn.style.display = "inline-block";
+  }
+  document.getElementById("savePhotoBtn").onclick = async () => {
+    const blob = await shot.toBlob((c, w, h) => drawPhotoOverlay(c, w, h, { title: TITLE, record: count + RECORD_SUFFIX, medal }));
+    downloadBlob(blob, `수학체육올림픽6_원과녁샤프슈터_${formatFileTimestamp()}.png`);
+  };
+  document.getElementById("saveVideoBtn").onclick = () => {
+    if (recordedBlob) downloadBlob(recordedBlob, `수학체육올림픽6_원과녁샤프슈터_${formatFileTimestamp()}.${recorder.extension}`);
+  };
+  document.getElementById("resultPanel").style.display = "flex";
+  if (!isMuted()) sound.success();
+}
+
+document.getElementById("retryBtn").addEventListener("click", () => {
+  document.getElementById("resultPanel").style.display = "none";
+  document.getElementById("raisePanel").style.display = "flex";
+  startGate.since = 0; startGate.ready = false; holdFill.style.width = "0%";
+  state = "raise";
+});
+
+document.getElementById("raisePanel").addEventListener("click", () => {
+  if (state === "raise" && mode !== "motion") goReady();
+});
+
+function goReady() {
+  state = "ready";
+  document.getElementById("raisePanel").style.display = "none";
+  document.getElementById("readyPanel").style.display = "flex";
+  if (!isMuted()) sound.click();
+  setTimeout(() => {
+    document.getElementById("readyPanel").style.display = "none";
+    startCountdown();
+  }, 500);
+}
+
+// ── 조준·당김 읽기 ──
+function readAim() {
+  if (mode === "motion") {
+    const f = motion.last;
+    if (!f) return;
+    // 앞손 = 화면에서 더 왼쪽에 있는 손목(오른손잡이 기준 활을 든 손). 그 손이 조준점이 된다.
+    const front = f.lw.x < f.rw.x ? f.lw : f.rw;
+    aim.x += (front.x - aim.x) * 0.35;
+    aim.y += (front.y - aim.y) * 0.35;
+    // 당김 = 두 손 사이 거리
+    const units = Math.hypot(f.rw.x - f.lw.x, f.rw.y - f.lw.y) / f.unit;
+    draw = Math.max(0, Math.min(1, (units - DRAW_MIN) / (DRAW_FULL - DRAW_MIN)));
+    // 만작이었다가 확 줄면 발사
+    if (lastDrawUnits >= DRAW_FULL * 0.92 && units < lastDrawUnits - RELEASE_DROP) {
+      fire();
+      lastDrawUnits = 0;
+      return;
+    }
+    lastDrawUnits = units;
+    return;
+  }
+  const p = cursors[0];
+  if (p) { aim.x = p.x; aim.y = p.y; }
+  draw = 1;
+  if (tapReleased()) fire();   // 눌렀다 떼면 발사
+}
+
+// ── 과녁 ──
+function drawTarget(ctx) {
+  const c = targetCenter(), R = targetRadius();
+  const cols = ["#f8f9fa", "#343a40", "#4dabf7", PARTY.gold];
+  ctx.save();
+  // i = 0 이 가장 바깥 링이다. 바깥일수록 반지름이 커야 하므로 RINGS를 뒤에서부터 읽는다.
+  // (예전에는 바깥이 5, 가운데가 20으로 뒤집혀 있었다)
+  const ringAt = (i) => RINGS[RINGS.length - 1 - i];
+  for (let i = 0; i < RINGS.length; i++) {
+    const rr = R * (1 - i / RINGS.length);
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, rr, 0, Math.PI * 2);
+    ctx.fillStyle = cols[i];
+    // 문제로 나온 반지름의 링을 또렷하게, 나머지는 흐리게 — "이 원의 넓이"가 눈에 보인다
+    ctx.globalAlpha = round && ringAt(i) === round.hitR ? 1 : 0.4;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = CUTE.ink;
+    ctx.lineWidth = Math.max(2, R * 0.018);
+    ctx.stroke();
+  }
+  ctx.restore();
+  // 각 링의 반지름 표시 — 문제에 나올 수가 눈에 보여야 한다.
+  // 위쪽에 적으면 가장 바깥 링의 숫자가 문제 배너에 가려지므로 아래쪽 절반에 적는다.
+  const fs = fluidPx(dims, 15, { min: 11, max: 20 });
+  for (let i = 0; i < RINGS.length; i++) {
+    const rr = R * (1 - i / RINGS.length) - R / RINGS.length / 2;
+    const val = RINGS[RINGS.length - 1 - i];
+    drawChunkyText(ctx, String(val), c.x, c.y + rr, fs, val === (round && round.hitR) ? PARTY.gold : "#fff",
+      { outline: CUTE.ink, outlineWidth: Math.max(2.5, fs * 0.24) });
+  }
+}
+
+// ── 정답 풍선 — 좌우로 흘러간다 (모두 같은 색·같은 크기) ──
+function drawBalloons(ctx, now) {
+  const { w, h } = dims;
+  const r = fluidPx(dims, 44, { min: 30, max: 62 });
+  const fs0 = r * 0.52;
+  let alive = 0, appeared = 0;
+  for (const b of balloons) {
+    b.r = r;
+    const t = (now - b.at) / b.dur;
+    if (t < 0) continue;
+    appeared++;
+    if (b.popped || t >= 1) continue;
+    alive++;
+    // 한쪽 끝에서 반대쪽 끝으로 천천히 흘러간다 — 멈춰 있으면 표적 도전이 아니다
+    b.x = b.dir > 0 ? -r + (w + r * 2) * t : w + r - (w + r * 2) * t;
+    b.y = b.baseY + Math.sin(now / 620 + b.phase) * r * 0.30;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y + r * 1.05);
+    ctx.lineTo(b.x - r * 0.13, b.y + r * 0.86);
+    ctx.lineTo(b.x + r * 0.13, b.y + r * 0.86);
+    ctx.closePath();
+    ctx.fillStyle = CUTE.purple; ctx.fill();
+    ctx.strokeStyle = CUTE.ink; ctx.lineWidth = Math.max(2.5, r * 0.09); ctx.stroke();
+    ctx.restore();
+    drawSticker(ctx, b.x, b.y, r, CUTE.purple, { lineWidth: Math.max(3, r * 0.11) });
+    const label = fmt(b.v);
+    let fs = fs0;
+    ctx.save(); ctx.font = `900 ${fs}px sans-serif`;
+    const tw = ctx.measureText(label).width; ctx.restore();
+    if (tw > r * 1.5) fs *= (r * 1.5) / tw;
+    drawChunkyText(ctx, label, b.x, b.y, fs, "#fff",
+      { outline: CUTE.ink, outlineWidth: Math.max(3, fs * 0.24) });
+  }
+  if (!resolving && appeared === balloons.length && alive === 0) missAll();
+}
+
+// ── 조준선 · 시위 게이지 ──
+function drawAim(ctx) {
+  const r = fluidPx(dims, 34, { min: 24, max: 48 });
+  const ready = draw >= 0.92;
+  // 당길수록 조준원이 작아진다 — 정밀 사격의 긴장감
+  const ring = r * (1.6 - draw * 0.65);
+  ctx.save();
+  ctx.strokeStyle = ready ? CUTE.green : "#fff";
+  ctx.lineWidth = Math.max(3, r * 0.13);
+  ctx.globalAlpha = 0.9;
+  ctx.beginPath(); ctx.arc(aim.x, aim.y, ring, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(aim.x - ring * 1.35, aim.y); ctx.lineTo(aim.x - ring * 0.5, aim.y);
+  ctx.moveTo(aim.x + ring * 0.5, aim.y); ctx.lineTo(aim.x + ring * 1.35, aim.y);
+  ctx.moveTo(aim.x, aim.y - ring * 1.35); ctx.lineTo(aim.x, aim.y - ring * 0.5);
+  ctx.moveTo(aim.x, aim.y + ring * 0.5); ctx.lineTo(aim.x, aim.y + ring * 1.35);
+  ctx.stroke();
+  ctx.restore();
+
+  if (mode === "motion") {
+    // 시위 게이지 — 화면 왼쪽 아래에 세로 막대
+    const { w, h } = dims;
+    const gw = fluidPx(dims, 22, { min: 16, max: 30 }), gh = h * 0.24;
+    const gx = w * 0.07, gy = h * 0.66;
+    drawStickerRect(ctx, gx, gy, gw, gh, gw / 2, "rgba(255,255,255,0.85)",
+      { lineWidth: Math.max(2, gw * 0.14), drop: 0 });
+    ctx.save();
+    ctx.fillStyle = ready ? CUTE.green : PARTY.gold;
+    const fh = Math.max(gw, gh * draw);
+    ctx.beginPath();
+    ctx.roundRect(gx - gw / 2, gy + gh / 2 - fh, gw, fh, gw / 2);
+    ctx.fill();
+    ctx.restore();
+    drawChunkyText(ctx, ready ? "놓아!" : "당겨!", gx, gy + gh / 2 + gw * 1.1,
+      fluidPx(dims, 16, { min: 12, max: 22 }), ready ? CUTE.green : "#fff",
+      { outline: CUTE.ink, outlineWidth: fluidPx(dims, 5, { min: 3, max: 7 }) });
+  }
+}
+
+function loop(tsMs) {
+  requestAnimationFrame(loop);
+  if (mode === "motion" && video.readyState < 2) return;
+  const { ctx, w, h } = dims;
+  ctx.save();
+  shake.apply(ctx);
+  if (mode === "motion") drawMirroredVideo(ctx, video, w, h);
+  else drawPartyBackdrop(ctx, dims);
+  drawDrifters(ctx, drifters, dims, 1 / 60);
+  drawBunting(ctx, dims);
+  drawCrowd(ctx, dims, party.cheerUntil);
+
+  let result = null;
+  if (mode === "motion") {
+    result = poseTracker.detect(video, tsMs);
+    motion.push(tsMs, posePoints(result), w, h, video);
+    if (state === "raise") {
+      if (startGate.update(tsMs, isArmRaised(posePoints(result)))) goReady();
+    }
+  }
+  cursors = getCursors(mode, result, w, h, video, pointerInput);
+
+  if (state === "playing") stepGame();
+
+  if (mode === "motion") {
+    const f = motion.last;
+    if (f) {
+      const r = fluidPx(dims, 20, { min: 14, max: 28 });
+      // 두 손을 잇는 시위
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,255,255,0.8)";
+      ctx.lineWidth = Math.max(2.5, r * 0.2);
+      ctx.beginPath(); ctx.moveTo(f.lw.x, f.lw.y); ctx.lineTo(f.rw.x, f.rw.y); ctx.stroke();
+      ctx.restore();
+      for (const k of ["lw", "rw"]) {
+        drawSticker(ctx, f[k].x, f[k].y, r, CUTE.cream, { lineWidth: Math.max(3, r * 0.16) });
+      }
+    } else if (state === "playing") {
+      drawChunkyText(ctx, "카메라에 두 손이 보이게 물러서 주세요!", w * 0.5, h * 0.5,
+        fluidPx(dims, 22, { min: 16, max: 30 }), "#fff",
+        { outline: CUTE.ink, outlineWidth: fluidPx(dims, 6, { min: 4, max: 8 }) });
+    }
+  } else {
+    for (const c of cursors) drawGloveCursor(ctx, c.x, c.y, fluidPx(dims, 44, { min: 32, max: 62 }), { active: !resolving });
+  }
+  ctx.restore();
+}
+
+function stepGame() {
+  const { ctx, w, h } = dims;
+  const dt = lastFrameAt ? Math.min(0.06, (performance.now() - lastFrameAt) / 1000) : 1 / 60;
+  lastFrameAt = performance.now();
+  const remain = Math.max(0, playEndAt - performance.now());
+  if (remain <= 0) { endGame(); return; }
+  const now = performance.now();
+
+  if (!resolving) readAim();
+
+  // 화살 비행 — 0.22초 뒤 판정
+  if (arrow) {
+    const t = (now - arrow.born) / 220;
+    if (t >= 1) resolveArrow(arrow.tx, arrow.ty);
+  }
+
+  drawTarget(ctx);
+  drawBalloons(ctx, now);
+  if (!resolving) drawAim(ctx);
+
+  if (arrow) {
+    // 날아가는 화살 — 조준점에서 짧게 뻗는 선으로 표현
+    const t = Math.min(1, (now - arrow.born) / 220);
+    const len = fluidPx(dims, 60, { min: 40, max: 86 }) * (1 - t);
+    ctx.save();
+    ctx.strokeStyle = PARTY.gold;
+    ctx.lineWidth = fluidPx(dims, 7, { min: 5, max: 10 });
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(arrow.tx, arrow.ty + len);
+    ctx.lineTo(arrow.tx, arrow.ty);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  const br = fluidPx(dims, 22, { min: 16, max: 30 });
+  drawMascot(ctx, w * 0.95, h * 0.40, br, CHAR, party.currentMood(remain));
+
+  const hudBottom = party.drawHud(ctx, dims, { remainMs: remain, count, suffix: "발" });
+
+  const lines = [
+    { text: round.quiz.q.replace("<", "「").replace(">", "」"), size: 19, chunky: true, color: PARTY.gold },
+    // 공식에 숫자를 대입하는 단계가 가장 큰 벽이라, 대입까지 끝난 식을 크게 보여준다
+    { text: round.quiz.sub, size: 27, chunky: true, color: CUTE.ink },
+  ];
+  drawCuteBanner(ctx, dims, lines, fluidPx, { top: hudBottom });
+
+  if (remain < 10000) {
+    const fs2 = fluidPx(dims, 22, { min: 16, max: 30 });
+    const puls = 1 + Math.sin(now / 120) * 0.08;
+    ctx.save(); ctx.translate(w * 0.5, h * 0.30); ctx.scale(puls, puls);
+    drawChunkyText(ctx, "🔥 라스트 스퍼트! 코인 2배", 0, 0, fs2, CUTE.red,
+      { outline: "#fff", outlineWidth: Math.max(4, fs2 * 0.24) });
+    ctx.restore();
+  }
+  drawChunkyText(ctx,
+    mode === "motion" ? "흘러가는 정답 풍선을 쏴요! 앞손 겨냥 · 뒷손 당겼다 놓기" : "흘러가는 정답 풍선을 쏴요! 눌렀다 떼면 발사",
+    w * 0.5, h * 0.96, fluidPx(dims, 15, { min: 11, max: 20 }), "#fff",
+    { outline: CUTE.ink, outlineWidth: fluidPx(dims, 5, { min: 3.5, max: 7 }) });
+
+  party.update(dt);
+  confetti = updateConfetti(confetti, dt); drawConfetti(ctx, confetti);
+  sparks = updateSparkles(sparks, dt); drawSparkles(ctx, sparks);
+  drawStreak(ctx);
+  party.drawFx(ctx, dims);
+  party.drawFeverFrame(ctx, dims);
+
+  drawVignette(ctx, w, h, 0.16);
+  drawLevelStars(ctx, dims, autoDiff.level, fluidPx);
+}
+
+init();
+</script>
+</body>
+</html>

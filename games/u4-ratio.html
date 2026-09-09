@@ -1,0 +1,753 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>비례 배구 · 종목 4</title>
+<link rel="stylesheet" href="../css/style.css?v=6">
+</head>
+<body>
+
+<div class="game-stage">
+  <video id="video" playsinline muted style="display:none"></video>
+  <canvas id="gameCanvas"></canvas>
+
+  <div class="hud">
+    <div class="rec" id="recIndicator" style="display:none"><span class="dot"></span>REC</div>
+    <button class="home-btn" id="homeBtn">🏠</button>
+  </div>
+
+  <div class="overlay-panel" id="loadingPanel">
+    <h2>🏐 비례 배구</h2>
+    <p id="loadingText">준비 중…</p>
+  </div>
+
+  <div class="overlay-panel" id="rulePanel" style="display:none">
+    <div class="rule-card">
+      <div class="rule-head">
+        <div class="rule-char">🐯</div>
+        <div>
+          <div class="rule-name">스파이크</div>
+          <h2 class="rule-title">비례 배구</h2>
+        </div>
+      </div>
+      <p class="rule-cheer"></p>
+      <ul class="rule-list"></ul>
+      <div class="rule-timer"><div class="rule-timer-fill"></div></div>
+      <button class="rule-go">좋아, 시작!</button>
+    </div>
+  </div>
+
+  <div class="overlay-panel" id="raisePanel" style="display:none">
+    <div class="raise-icon" id="raiseIcon">🙋</div>
+    <h2 id="raiseText">손을 들어 주세요!</h2>
+    <div class="hold-bar"><div class="hold-fill" id="holdFill"></div></div>
+  </div>
+
+  <div class="overlay-panel ready-flash" id="readyPanel" style="display:none">
+    <h2>✋ 좋아요! 준비됐어요</h2>
+  </div>
+
+  <div class="overlay-panel" id="countdownPanel" style="display:none">
+    <div class="countdown-num" id="countNum">3</div>
+  </div>
+
+  <div class="overlay-panel" id="resultPanel" style="display:none">
+    <div id="podium"></div>
+    <div class="result-stats">
+      <div class="stat-box"><div class="num" id="statCount">0점</div><div class="label">득점</div></div>
+      <div class="stat-box"><div class="num" id="statBest">0점</div><div class="label">최고 기록</div></div>
+      <div class="stat-box"><div class="num" id="statCombo">0</div><div class="label">최장 랠리</div></div>
+    </div>
+    <video class="preview" id="previewVideo" controls playsinline style="display:none"></video>
+    <div class="action-row">
+      <button class="ghost-btn" id="savePhotoBtn">📸 사진</button>
+      <button class="ghost-btn" id="saveVideoBtn" style="display:none">🎬 3초 영상</button>
+      <button class="big-btn" id="retryBtn">🔁 한 번 더</button>
+      <button class="ghost-btn" id="homeBtn2">🏠 종목 선택</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import {
+  HighScore, requestWakeLock, SoundKit, FileAudioLoop,
+  ClipRecorder, downloadBlob,
+  drawMirroredVideo, fitCanvasToScreen, getCursors,
+  PoseTracker, PoseMotion, posePoints, isArmRaised,
+  AutoDifficulty, levelFromUrl, medalFor,
+  scheduleAutoRecording, ComboShot, drawPhotoOverlay,
+  ScreenShake, InputMode, PointerInput, StartGate,
+  startCamera, formatFileTimestamp, fluidPx, showSoundHint,
+  drawVignette, spawnConfetti, updateConfetti, drawConfetti,
+} from "../js/engine.js?v=4";
+import {
+  CUTE, drawSticker, drawStickerRect, drawChunkyText,
+  spawnSparkles, updateSparkles, drawSparkles, makeDrifters, drawDrifters,
+  drawBunting, drawLevelStars, drawCuteBanner,
+} from "../js/cute.js?v=7";
+import {
+  PARTY, CHARACTERS, Party, drawPartyBackdrop, drawCrowd, drawMascot,
+  showRuleCard, renderPodium, irisTransition,
+} from "../js/party.js?v=2";
+requestWakeLock();
+
+const UNIT = "n4";
+const TITLE = "비례 배구";
+const RECORD_SUFFIX = "점";
+const MEDALS = { bronze: 5, silver: 9, gold: 14 };
+const CHAR = CHARACTERS[UNIT];
+const OPP = CHARACTERS.n1;
+const mode = InputMode.get();
+
+const video = document.getElementById("video");
+const canvas = document.getElementById("gameCanvas");
+let dims = fitCanvasToScreen(canvas);
+let drifters = makeDrifters(6, dims.w, dims.h);
+window.addEventListener("resize", () => {
+  dims = fitCanvasToScreen(canvas);
+  drifters = makeDrifters(6, dims.w, dims.h);
+});
+
+const sound = new SoundKit();
+const bgm = new FileAudioLoop("../assets/sounds/subbgm.mp3", 0.32);
+const isMuted = () => localStorage.getItem("smo_muted") === "1";
+const party = new Party({ unit: UNIT, sound, isMuted });
+
+function goHome() { bgm.stop(); irisTransition(() => { location.href = "../index.html"; }); }
+document.getElementById("homeBtn").addEventListener("click", goHome);
+document.getElementById("homeBtn2").addEventListener("click", goHome);
+
+function randInt(min, max) { return min + Math.floor(Math.random() * (max - min + 1)); }
+function gcd(a, b) { return b === 0 ? a : gcd(b, a % b); }
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function red(p, q) { const g = gcd(p, q) || 1; return { p: p / g, q: q / g }; }
+function fracText(p, q) { const r = red(p, q); return r.q === 1 ? String(r.p) : `${r.p}/${r.q}`; }
+function fkey(f) { return `${f.p}/${f.q}`; }
+
+// ---------------------------------------------------------------------------
+// 코트 — 피카츄 배구처럼 <옆에서 본 화면>이다.
+// 왼쪽이 상대 코트, 오른쪽이 내 코트, 가운데가 네트.
+// 상대 코트 바닥은 앞·중간·뒤 세 구역으로 나뉘고 각 구역에 분수가 적혀 있다.
+// ---------------------------------------------------------------------------
+const GROUND = 0.80;        // 바닥
+const NET_TOP = 0.50;       // 네트 꼭대기
+const HIT_Y = 0.62;         // 셔틀콕이 이 높이로 내려오면 라켓에 닿는다
+
+function groundY() { return dims.h * GROUND; }
+function netX() { return dims.w * 0.5; }
+// 상대 코트 세 구역 (네트에서 먼 쪽이 "뒤")
+function zoneRects() {
+  const { w } = dims;
+  const left = w * 0.04, right = w * 0.47;
+  const zw = (right - left) / 3;
+  return [
+    { key: "back", x0: left, x1: left + zw },                 // 뒤 — 점프해서 멀리
+    { key: "mid", x0: left + zw, x1: left + zw * 2 },          // 중간 — 그냥 치기
+    { key: "front", x0: left + zw * 2, x1: right },            // 앞 — 낮게 놓기
+  ];
+}
+// 배드민턴(종목 1)은 <자세>로 조준했다. 배구는 <때리는 순간의 공 높이>로 조준한다.
+// 높은 데서 때리면 멀리, 낮은 데서 때리면 가까이 — 실제 스파이크와 같고, 타이밍 게임이 된다.
+const BAND_HIGH = 0.48;     // 이 위에서 때리면 뒤 구역
+const BAND_MID = 0.63;      // 이 위에서 때리면 가운데 구역
+function zoneForHeight(y) {
+  const h = dims.h;
+  if (y < h * BAND_HIGH) return 0;
+  if (y < h * BAND_MID) return 1;
+  return 2;
+}
+const ZONE_LABEL = ["뒤로", "가운데", "앞으로"];
+
+// ---------------------------------------------------------------------------
+// 문제 만들기 — 세 구역에 붙일 분수 세 개
+// ---------------------------------------------------------------------------
+function pickRatio(maxParts) {
+  for (let i = 0; i < 200; i++) {
+    let a = randInt(1, 5), b = randInt(1, 5);
+    const g = gcd(a, b); a /= g; b /= g;
+    if (a === b) continue;
+    if (a + b <= maxParts) return { a, b };
+  }
+  return { a: 1, b: 2 };
+}
+
+function genRound(level) {
+  const maxTotal = level === 1 ? 18 : 24;
+  const maxParts = level === 1 ? 5 : 7;
+  const { a, b } = pickRatio(maxParts);
+  const parts = a + b;
+  const k = randInt(2, Math.max(2, Math.floor(maxTotal / parts)));
+  const total = parts * k;
+  const answer = a * k;
+
+  let text, hint;
+  if (level === 1) {
+    text = `${total}을 ${a} : ${b}로 나누면 왼쪽은?`;
+    hint = `전체를 ${parts}칸으로 나누고 왼쪽 ${a}칸이에요`;
+  } else if (level === 2) {
+    const m = randInt(2, 4);
+    text = `${total}을 ${a * m} : ${b * m}로 나누면 왼쪽은?`;
+    hint = `${a * m} : ${b * m}을 간단히 하면 ${a} : ${b}예요`;
+  } else {
+    const c = b * k;
+    text = `${a} : ${b} = ☐ : ${c}  →  ☐ 는?`;
+    hint = `오른쪽이 ${c}가 되게 나누면 왼쪽이 ☐ 예요`;
+  }
+
+  // 오답은 아이들이 실제로 하는 실수 — 비를 뒤집기, 반으로 나누기, 한 칸 어긋나기
+  const cand = [b * k, Math.round(total / 2), answer + k, answer - k, total - answer];
+  const seen = new Set([answer]);
+  const picks = [];
+  for (const v of shuffle(cand)) {
+    if (v <= 0 || v >= total || seen.has(v)) continue;
+    seen.add(v); picks.push(v);
+    if (picks.length >= 2) break;
+  }
+  while (picks.length < 2) { const v = randInt(1, total - 1); if (!seen.has(v)) { seen.add(v); picks.push(v); } }
+
+  return {
+    text, hint, ans: { p: answer, q: 1 },
+    cells: shuffle([{ f: { p: answer, q: 1 }, ok: true },
+                    { f: { p: picks[0], q: 1 }, ok: false },
+                    { f: { p: picks[1], q: 1 }, ok: false }]),
+  };
+}
+
+const poseTracker = new PoseTracker();
+const motion = new PoseMotion();
+let pointerInput = null;
+
+async function init() {
+  if (!isMuted()) bgm.play(showSoundHint);
+  if (mode === "motion") {
+    try {
+      await startCamera(video, { width: 640, height: 480 });
+      if (!isMuted()) bgm.play(showSoundHint);
+    } catch (e) {
+      document.getElementById("loadingText").textContent = "⚠️ 카메라를 찾을 수 없어요. 카메라 권한을 확인해주세요.";
+      return;
+    }
+    document.getElementById("loadingText").textContent = "AI 모델을 불러오는 중…";
+    await poseTracker.init();
+  } else {
+    pointerInput = new PointerInput(canvas);
+  }
+  document.getElementById("loadingPanel").style.display = "none";
+
+  await showRuleCard({
+    unit: UNIT,
+    title: "비례 배구",
+    lines: [
+      "상대와 <b>진짜 랠리</b>를 해요! 공이 오면 <b>그 자리로 달려가</b> 스파이크!",
+      mode === "motion"
+        ? "<b>점프하는 순간의 공 높이</b>로 방향이 정해져요. 높이서 때리면 뒤로!"
+        : "<b>누르는 순간의 공 높이</b>로 방향이 정해져요. 높을 때 누르면 뒤로!",
+      "공 옆에 <b>지금 때리면 어디로 가는지</b> 계속 보여요.",
+      "답이 있는 구역에 꽂으면 득점! <b>안 때리면 실점</b>이에요.",
+    ],
+  });
+
+  document.getElementById("raiseIcon").textContent = mode === "motion" ? "🙋" : "👆";
+  document.getElementById("raiseText").textContent = mode === "motion" ? "손을 들어 주세요!" : "화면을 터치(클릭)하면 시작!";
+  document.getElementById("raisePanel").style.display = "flex";
+  state = "raise";
+  requestAnimationFrame(loop);
+}
+
+let state = "loading";
+const holdFill = document.getElementById("holdFill");
+const startGate = new StartGate(mode, holdFill);
+
+let autoDiff, count, oppScore, playEndAt;
+let round = null, roundAt;
+let shuttle = null;            // { x, y, vx, vy, side:"me"|"opp", zone }
+let me = { x: 0, stance: "mid", jumpUntil: 0, swing: 0 };
+let opp = { x: 0, target: 0, mood: "idle" };
+let rally = 0, maxRally = 0;
+let paused = 0;                // 득점 후 잠깐 멈춤
+let bannerMsg = null;
+let confetti = [], sparks = [];
+const shake = new ScreenShake();
+let recorder, comboShot, fallbackShot, autoRec, recordedBlob = null;
+const recIndicator = document.getElementById("recIndicator");
+let cursors = [];
+let lastFrameAt = 0;
+
+// 스윙 입력 — 점프(모션) 또는 탭(터치·마우스). 누르는 "순간"이 곧 조준이다.
+let pressSeen = false;
+function swingNow() {
+  if (mode === "motion") {
+    const j = motion.jump();
+    if (j && j.power > 0.16) { me.jumpUntil = performance.now() + 420; return true; }
+    return false;
+  }
+  if (!pointerInput) return false;
+  if (pointerInput.consumeJustDown()) pressSeen = true;
+  if (pressSeen && !pointerInput.down) { pressSeen = false; return true; }
+  return false;
+}
+
+// party 의 판정 문구가 화면 끝에서 잘리지 않게 안쪽으로 당긴다
+function safeX(x) { return Math.max(dims.w * 0.26, Math.min(dims.w * 0.74, x)); }
+
+function isSpurt() { return playEndAt - performance.now() < 10000; }
+const GRAV = () => dims.h * 2.1;
+// 랠리가 이어질수록 셔틀콕이 빨라진다
+function flightT() {
+  return Math.max(0.85, 1.75 - rally * 0.06) * (isSpurt() ? 0.9 : 1);
+}
+
+// 출발점에서 목표점까지 T초에 닿는 포물선을 만든다
+function launch(x, y, tx, ty, T) {
+  const g = GRAV();
+  return { x, y, vx: (tx - x) / T, vy: (ty - y - 0.5 * g * T * T) / T };
+}
+
+function newRound(serveOnly) {
+  if (!serveOnly) { round = genRound(autoDiff.level); rally = 0; }
+  const { w, h } = dims;
+  // 상대가 내 코트 아무 데로나 보낸다 — 셔틀콕을 쫓아 달리는 것 자체가 운동이다
+  const tx = w * (0.58 + Math.random() * 0.34);
+  const sx = w * 0.20, sy = h * 0.66;
+  opp.x = sx; opp.target = sx;
+  const v = launch(sx, sy, tx, groundY() - h * 0.02, flightT());
+  shuttle = { ...v, side: "opp", zone: -1 };
+  roundAt = performance.now();
+}
+
+function startCountdown() {
+  state = "countdown";
+  document.getElementById("countdownPanel").style.display = "flex";
+  const numEl = document.getElementById("countNum");
+  let n = 3;
+  numEl.textContent = n;
+  if (!isMuted()) sound.countBeep();
+  const iv = setInterval(() => {
+    n--;
+    if (n <= 0) {
+      clearInterval(iv);
+      document.getElementById("countdownPanel").style.display = "none";
+      if (!isMuted()) sound.go();
+      beginPlay();
+    } else {
+      numEl.textContent = n;
+      if (!isMuted()) sound.countBeep();
+    }
+  }, 700);
+}
+
+function beginPlay() {
+  state = "playing";
+  const prev = HighScore.get(UNIT);
+  autoDiff = new AutoDifficulty(levelFromUrl(AutoDifficulty.startLevelFromHighScore(prev)));
+  count = 0; oppScore = 0; rally = 0; maxRally = 0;
+  party.reset();
+  confetti = []; sparks = [];
+  playEndAt = performance.now() + 60000;
+  lastFrameAt = 0;
+  paused = 0; bannerMsg = null;
+  me.x = dims.w * 0.75;
+  round = genRound(1);
+  shuttle = null;
+  paused = performance.now() + 1000;   // 첫 서브 전에 자리 잡을 틈을 준다
+
+  recorder = new ClipRecorder(canvas, sound, 24);
+  recorder.prepare();
+  comboShot = new ComboShot(canvas);
+  fallbackShot = new ComboShot(canvas);
+  autoRec = scheduleAutoRecording(recorder, {
+    onStartVisual: () => {
+      recIndicator.style.display = "flex";
+      setTimeout(() => { if (!comboShot.captured) fallbackShot.capture(canvas); }, 1500);
+    },
+    onEndVisual: () => { recIndicator.style.display = "none"; },
+    onDone: (blob) => { recordedBlob = blob; },
+    fallbackMs: 8000,
+  });
+}
+
+// ── 내가 받아친다 ──
+function hitByMe() {
+  const zi = zoneForHeight(shuttle.y);
+  const z = zoneRects()[zi];
+  const tx = (z.x0 + z.x1) / 2;
+  const v = launch(shuttle.x, shuttle.y, tx, groundY() - dims.h * 0.02, flightT());
+  shuttle = { ...v, side: "me", zone: zi };
+  me.swing = 1;
+  rally++;
+  if (rally > maxRally) maxRally = rally;
+  opp.target = tx;
+  if (!isMuted()) sound.swoosh();
+  shake.trigger(zi === 0 ? 9 : 5, 140);
+  spawnSparkles(sparks, shuttle.x, shuttle.y, 10, ["#fff", PARTY.gold]);
+}
+
+// ── 셔틀콕이 상대 코트에 닿았다 ──
+function landOnOpponent() {
+  const ok = round.cells[shuttle.zone].ok;
+  const x = shuttle.x, y = groundY();
+  if (ok) {
+    count++;
+    const base = (10 + Math.min(8, rally * 2)) * (isSpurt() ? 2 : 1);
+    party.correct(safeX(x), y, { base, elapsedMs: 1200 });
+    if (party.combo > 0 && party.combo === party.maxCombo) comboShot.capture(canvas);
+    autoDiff.reportCorrect();
+    autoRec.trigger();
+    shake.trigger(12, 240);
+    if (!isMuted()) sound.hit("perfect");
+    spawnSparkles(sparks, x, y, 34, ["#fff", PARTY.gold, CUTE.red]);
+    spawnConfetti(confetti, x, y - dims.h * 0.1, 40);
+    opp.mood = "sad";
+    bannerMsg = { text: rally >= 4 ? `🔥 ${rally}구 랠리 끝에 득점!` : "득점!", color: PARTY.gold, until: performance.now() + 1300 };
+    shuttle = null;
+    paused = performance.now() + 900;
+  } else {
+    // 틀린 구역 — 상대가 받아쳐서 랠리가 이어진다. 같은 문제로 다시 도전!
+    opp.mood = "happy";
+    const { w, h } = dims;
+    const tx = w * (0.58 + Math.random() * 0.34);
+    const v = launch(shuttle.x, groundY() - h * 0.10, tx, groundY() - h * 0.02, flightT());
+    shuttle = { ...v, side: "opp", zone: -1 };
+    rally++;
+    if (rally > maxRally) maxRally = rally;
+    if (!isMuted()) sound.pop();
+    bannerMsg = { text: "상대가 받아쳤어요!", color: CUTE.blue, until: performance.now() + 900 };
+  }
+}
+
+// ── 내가 놓쳤다 ──
+function missed() {
+  oppScore++;
+  party.wrong(safeX(shuttle.x), groundY() - dims.h * 0.06, `정답은 ${fracText(round.ans.p, round.ans.q)}`);
+  autoDiff.reportWrong();
+  if (!isMuted()) sound.wrong();
+  shake.trigger(7, 200);
+  opp.mood = "happy";
+  bannerMsg = { text: "놓쳤어요! 상대 득점", color: CUTE.red, until: performance.now() + 1200 };
+  shuttle = null;
+  paused = performance.now() + 900;
+}
+
+function endGame() {
+  state = "result";
+  const { medal, label } = medalFor(count, MEDALS);
+  const prev = HighScore.get(UNIT);
+  const best = Math.max(count, prev ? prev.count : 0);
+  if (!prev || count >= prev.count) {
+    HighScore.set(UNIT, { count, bestLevel: autoDiff.level, label: `${medal} ${count}${RECORD_SUFFIX}`, at: Date.now() });
+  }
+  renderPodium({ unit: UNIT, medal, label, coins: party.coins, maxCombo: maxRally, count, suffix: RECORD_SUFFIX, best });
+  document.getElementById("statCount").textContent = count + "점";
+  document.getElementById("statBest").textContent = best + "점";
+  document.getElementById("statCombo").textContent = "🏐" + maxRally + "구";
+
+  const shot = comboShot.captured ? comboShot : fallbackShot;
+  const previewVideo = document.getElementById("previewVideo");
+  const saveVideoBtn = document.getElementById("saveVideoBtn");
+  if (recordedBlob) {
+    previewVideo.src = URL.createObjectURL(recordedBlob);
+    previewVideo.style.display = "block";
+    saveVideoBtn.style.display = "inline-block";
+  }
+  document.getElementById("savePhotoBtn").onclick = async () => {
+    const blob = await shot.toBlob((c, w, h) => drawPhotoOverlay(c, w, h, { title: TITLE, record: count + RECORD_SUFFIX, medal }));
+    downloadBlob(blob, `수학체육올림픽6_비례배구_${formatFileTimestamp()}.png`);
+  };
+  document.getElementById("saveVideoBtn").onclick = () => {
+    if (recordedBlob) downloadBlob(recordedBlob, `수학체육올림픽6_비례배구_${formatFileTimestamp()}.${recorder.extension}`);
+  };
+  document.getElementById("resultPanel").style.display = "flex";
+  if (!isMuted()) sound.success();
+}
+
+document.getElementById("retryBtn").addEventListener("click", () => {
+  document.getElementById("resultPanel").style.display = "none";
+  document.getElementById("raisePanel").style.display = "flex";
+  startGate.since = 0; startGate.ready = false; holdFill.style.width = "0%";
+  state = "raise";
+});
+document.getElementById("raisePanel").addEventListener("click", () => {
+  if (state === "raise" && mode !== "motion") goReady();
+});
+
+function goReady() {
+  state = "ready";
+  document.getElementById("raisePanel").style.display = "none";
+  document.getElementById("readyPanel").style.display = "flex";
+  if (!isMuted()) sound.click();
+  setTimeout(() => {
+    document.getElementById("readyPanel").style.display = "none";
+    startCountdown();
+  }, 500);
+}
+
+// ── 내 위치 ──
+function readBody(dt) {
+  const { w } = dims;
+  let px = null;
+  if (mode === "motion") {
+    const f = motion.last;
+    if (f) px = f.sc.x;
+  } else if (cursors[0]) {
+    px = cursors[0].x;
+  }
+  if (px !== null) {
+    const target = Math.max(w * 0.53, Math.min(w * 0.96, px));
+    me.x += (target - me.x) * Math.min(1, dt * 11);
+  }
+  me.swing = Math.max(0, me.swing - dt * 3.5);
+}
+
+// ── 그리기 ──
+function drawCourt(ctx) {
+  const { w, h } = dims;
+  const gy = groundY(), nx = netX();
+  ctx.save();
+  // 바닥
+  ctx.fillStyle = "rgba(255,255,255,0.13)";
+  ctx.fillRect(0, gy, w, h - gy);
+  ctx.strokeStyle = "rgba(255,255,255,0.9)";
+  ctx.lineWidth = fluidPx(dims, 4, { min: 3, max: 6 });
+  ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(w, gy); ctx.stroke();
+  ctx.restore();
+
+  // 상대 코트 세 구역
+  const zs = zoneRects();
+  const aim = shuttle && shuttle.side === "opp" ? zoneForHeight(shuttle.y) : -1;
+  const fs = Math.min(fluidPx(dims, 30, { min: 20, max: 42 }), (zs[0].x1 - zs[0].x0) * 0.42);
+  for (let i = 0; i < zs.length; i++) {
+    const z = zs[i];
+    const hot = i === aim && shuttle && shuttle.side === "opp";
+    ctx.save();
+    ctx.fillStyle = hot ? "rgba(255,212,59,0.55)" : "rgba(255,255,255,0.10)";
+    ctx.fillRect(z.x0, gy - h * 0.055, z.x1 - z.x0, h * 0.055);
+    ctx.strokeStyle = hot ? PARTY.gold : "rgba(255,255,255,0.7)";
+    ctx.lineWidth = hot ? fluidPx(dims, 5, { min: 4, max: 8 }) : fluidPx(dims, 2, { min: 1.5, max: 3 });
+    ctx.strokeRect(z.x0, gy - h * 0.055, z.x1 - z.x0, h * 0.055);
+    ctx.restore();
+    drawChunkyText(ctx, fracText(round.cells[i].f.p, round.cells[i].f.q), (z.x0 + z.x1) / 2, gy - h * 0.0275,
+      fs, "#fff", { outline: CUTE.ink, outlineWidth: Math.max(3, fs * 0.22) });
+  }
+
+  // 네트
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,255,255,0.95)";
+  ctx.lineWidth = fluidPx(dims, 4, { min: 3, max: 6 });
+  ctx.beginPath(); ctx.moveTo(nx, gy); ctx.lineTo(nx, h * NET_TOP); ctx.stroke();
+  ctx.globalAlpha = 0.45;
+  ctx.lineWidth = fluidPx(dims, 1.6, { min: 1, max: 2.4 });
+  const cell = Math.max(9, h * 0.018);
+  for (let y = h * NET_TOP; y < gy; y += cell) {
+    ctx.beginPath(); ctx.moveTo(nx - cell * 1.6, y); ctx.lineTo(nx + cell * 1.6, y); ctx.stroke();
+  }
+  ctx.restore();
+  drawStickerRect(ctx, nx, h * NET_TOP - fluidPx(dims, 7, { min: 5, max: 10 }), fluidPx(dims, 26, { min: 18, max: 34 }),
+    fluidPx(dims, 10, { min: 7, max: 14 }), 4, CUTE.cream, { lineWidth: 2, drop: 2 });
+}
+
+function drawBands(ctx) {
+  const { w, h } = dims;
+  const nx = netX();
+  const rows = [
+    { y: h * BAND_HIGH, label: "여기 위 = 뒤로", col: CUTE.red },
+    { y: h * BAND_MID, label: "여기 위 = 가운데", col: CUTE.orange },
+  ];
+  ctx.save();
+  ctx.setLineDash([10, 8]);
+  ctx.lineWidth = fluidPx(dims, 2.5, { min: 2, max: 4 });
+  for (const r of rows) {
+    ctx.strokeStyle = r.col;
+    ctx.globalAlpha = 0.55;
+    ctx.beginPath(); ctx.moveTo(nx, r.y); ctx.lineTo(w, r.y); ctx.stroke();
+  }
+  ctx.restore();
+  const fs = fluidPx(dims, 13, { min: 10, max: 18 });
+  for (const r of rows) {
+    drawChunkyText(ctx, r.label, w * 0.985, r.y - fs * 0.9, fs, r.col,
+      { outline: CUTE.ink, outlineWidth: Math.max(2.5, fs * 0.24), align: "right" });
+  }
+}
+
+function drawMe(ctx, now) {
+  const { w, h } = dims;
+  const gy = groundY();
+  const jumping = now < me.jumpUntil;
+  const y = gy - (jumping ? h * 0.11 : 0);
+  const r = fluidPx(dims, 26, { min: 19, max: 36 });
+  const bodyH = r * 1.8;
+  ctx.save();
+  ctx.fillStyle = CUTE.orange;
+  ctx.strokeStyle = CUTE.ink;
+  ctx.lineWidth = Math.max(3, r * 0.16);
+  ctx.beginPath();
+  ctx.roundRect(me.x - r * 0.5, y - bodyH, r, bodyH, r * 0.35);
+  ctx.fill(); ctx.stroke();
+  ctx.restore();
+  drawSticker(ctx, me.x, y - bodyH - r * 0.55, r * 0.62, CUTE.cream, { lineWidth: Math.max(3, r * 0.14) });
+  // 때리는 팔
+  const sw = me.swing;
+  ctx.save();
+  ctx.translate(me.x - r * 0.2, y - bodyH * 0.95);
+  ctx.rotate(-1.4 + sw * 2.2);
+  ctx.strokeStyle = CUTE.ink; ctx.lineWidth = Math.max(3, r * 0.17); ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -r * 1.15); ctx.stroke();
+  ctx.restore();
+}
+
+function drawOpp(ctx, dt) {
+  const { h } = dims;
+  opp.x += (opp.target - opp.x) * Math.min(1, dt * 3.2);
+  const r = fluidPx(dims, 26, { min: 19, max: 36 });
+  drawMascot(ctx, opp.x, groundY() - dims.h * 0.075 - r, r, OPP, opp.mood);
+}
+
+function drawShuttle(ctx) {
+  if (!shuttle) return;
+  const { w, h } = dims;
+  const r = fluidPx(dims, 24, { min: 17, max: 33 });
+  drawSticker(ctx, shuttle.x, shuttle.y, r, CUTE.cream, { lineWidth: Math.max(3, r * 0.15) });
+  ctx.save();
+  ctx.strokeStyle = CUTE.ink; ctx.lineWidth = Math.max(2, r * 0.11);
+  ctx.beginPath(); ctx.arc(shuttle.x, shuttle.y, r * 0.62, -0.6, 1.2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(shuttle.x, shuttle.y, r * 0.62, 2.0, 3.8); ctx.stroke();
+  ctx.restore();
+  // 바닥 그림자
+  ctx.save();
+  ctx.globalAlpha = 0.25;
+  ctx.fillStyle = CUTE.ink;
+  ctx.beginPath(); ctx.ellipse(shuttle.x, groundY(), r * 0.9, r * 0.24, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  // "지금 때리면 어디로" — 이 미리보기가 타이밍 게임의 핵심이다
+  if (shuttle.side === "opp" && shuttle.x > netX()) {
+    const zi = zoneForHeight(shuttle.y);
+    const label = `${ZONE_LABEL[zi]} → ${fracText(round.cells[zi].f.p, round.cells[zi].f.q)}`;
+    const fs = fluidPx(dims, 19, { min: 14, max: 26 });
+    // 공이 높이 있을 때 위쪽에 붙이면 문제 배너에 가린다 — 그때는 아래로 붙인다
+    const py = shuttle.y < h * 0.34 ? shuttle.y + r * 2.2 : shuttle.y - r * 2.0;
+    const px2 = Math.max(fs * 4.4, Math.min(w - fs * 4.4, shuttle.x));
+    drawStickerRect(ctx, px2, py, fs * 8.2, fs * 1.8, fs * 0.45,
+      PARTY.gold, { lineWidth: Math.max(2.5, fs * 0.14), drop: fs * 0.16 });
+    drawChunkyText(ctx, label, px2, py, fs, CUTE.ink,
+      { outline: "#fff", outlineWidth: Math.max(2, fs * 0.13) });
+  }
+}
+
+function loop(tsMs) {
+  requestAnimationFrame(loop);
+  if (mode === "motion" && video.readyState < 2) return;
+  const { ctx, w, h } = dims;
+  ctx.save();
+  shake.apply(ctx);
+  if (mode === "motion") drawMirroredVideo(ctx, video, w, h);
+  else drawPartyBackdrop(ctx, dims);
+  drawDrifters(ctx, drifters, dims, 1 / 60);
+  drawBunting(ctx, dims);
+  drawCrowd(ctx, dims, party.cheerUntil);
+
+  let result = null;
+  if (mode === "motion") {
+    result = poseTracker.detect(video, tsMs);
+    motion.push(tsMs, posePoints(result), w, h, video);
+    if (state === "raise") {
+      if (startGate.update(tsMs, isArmRaised(posePoints(result)))) goReady();
+    }
+  }
+  cursors = getCursors(mode, result, w, h, video, pointerInput);
+
+  if (state === "playing") stepGame();
+
+  if (mode === "motion" && state === "playing" && !motion.last) {
+    drawChunkyText(ctx, "카메라에 온몸이 보이게 2~3걸음 물러서 주세요!", w * 0.5, h * 0.3,
+      fluidPx(dims, 20, { min: 15, max: 27 }), "#fff",
+      { outline: CUTE.ink, outlineWidth: fluidPx(dims, 6, { min: 4, max: 8 }) });
+  }
+  ctx.restore();
+}
+
+function stepGame() {
+  const { ctx, w, h } = dims;
+  const dt = lastFrameAt ? Math.min(0.05, (performance.now() - lastFrameAt) / 1000) : 1 / 60;
+  lastFrameAt = performance.now();
+  const remain = Math.max(0, playEndAt - performance.now());
+  if (remain <= 0) { endGame(); return; }
+  const now = performance.now();
+
+  readBody(dt);
+
+  // ── 셔틀콕 물리 ──
+  if (shuttle) {
+    shuttle.x += shuttle.vx * dt;
+    shuttle.y += shuttle.vy * dt;
+    shuttle.vy += GRAV() * dt;
+
+    if (shuttle.side === "opp") {
+      // 내가 <직접 때려야> 한다. 언제 때리느냐(공의 높이)가 곧 어디로 보내느냐다.
+      const reach = w * 0.135;
+      const inReach = Math.abs(shuttle.x - me.x) <= reach && shuttle.x > netX() && shuttle.y > h * 0.30;
+      if (inReach && swingNow()) {
+        hitByMe();
+      } else {
+        if (!inReach) swingNow();          // 범위 밖 헛스윙은 그냥 흘려보낸다
+        if (shuttle.y >= groundY()) missed();
+      }
+    } else {
+      if (shuttle.y >= groundY() - h * 0.01) landOnOpponent();
+    }
+  } else if (paused && now > paused) {
+    paused = 0;
+    const scored = count;
+    newRound(false);
+    void scored;
+  }
+
+  drawCourt(ctx);
+  drawBands(ctx);
+  drawOpp(ctx, dt);
+  drawMe(ctx, now);
+  drawShuttle(ctx);
+
+  // 점수판
+  const sfs = fluidPx(dims, 22, { min: 16, max: 30 });
+  drawStickerRect(ctx, w * 0.5, h * 0.925, sfs * 9, sfs * 1.9, sfs * 0.5, CUTE.cream,
+    { lineWidth: Math.max(3, sfs * 0.15), drop: sfs * 0.18 });
+  drawChunkyText(ctx, `나 ${count}  :  ${oppScore} 상대   🏐 랠리 ${rally}`, w * 0.5, h * 0.925, sfs * 0.82,
+    CUTE.ink, { outline: "#fff", outlineWidth: Math.max(2, sfs * 0.12) });
+
+  const hudBottom = party.drawHud(ctx, dims, { remainMs: remain, count, suffix: "점" });
+  drawCuteBanner(ctx, dims, [
+    { text: round.text, size: 26, chunky: true, color: PARTY.gold },
+    { text: round.hint, size: 14, color: CUTE.ink },
+  ], fluidPx, { top: hudBottom });
+
+  if (bannerMsg && now < bannerMsg.until) {
+    const fs = fluidPx(dims, 30, { min: 21, max: 42 });
+    const puls = 1 + Math.sin(now / 110) * 0.08;
+    ctx.save();
+    ctx.translate(w * 0.5, h * 0.36); ctx.scale(puls, puls);
+    drawChunkyText(ctx, bannerMsg.text, 0, 0, fs, bannerMsg.color,
+      { outline: CUTE.ink, outlineWidth: Math.max(4, fs * 0.22) });
+    ctx.restore();
+  } else if (remain < 10000) {
+    const fs = fluidPx(dims, 24, { min: 17, max: 33 });
+    const puls = 1 + Math.sin(now / 120) * 0.08;
+    ctx.save();
+    ctx.translate(w * 0.5, h * 0.36); ctx.scale(puls, puls);
+    drawChunkyText(ctx, "🔥 라스트 스퍼트! 코인 2배", 0, 0, fs, CUTE.red,
+      { outline: "#fff", outlineWidth: Math.max(4, fs * 0.24) });
+    ctx.restore();
+  }
+
+  party.update(dt);
+  confetti = updateConfetti(confetti, dt); drawConfetti(ctx, confetti);
+  sparks = updateSparkles(sparks, dt); drawSparkles(ctx, sparks);
+  party.drawFx(ctx, dims);
+  party.drawFeverFrame(ctx, dims);
+  drawVignette(ctx, w, h, 0.16);
+  drawLevelStars(ctx, dims, autoDiff.level, fluidPx);
+}
+
+init();
+</script>
+</body>
+</html>

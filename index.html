@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>🏃 수학 체육올림픽 6학년</title>
+<meta name="description" content="초등 6학년 2학기 수학 × 체육 융합. 카메라 앞에서 온몸으로 즐기는 AI 모션인식 수학 놀이 6종목.">
+<meta name="theme-color" content="#FFD166">
+<meta property="og:type" content="website">
+<meta property="og:title" content="🏃 수학 체육올림픽 6학년">
+<meta property="og:description" content="초등 6학년 2학기 · 표적·투기 도전 & 네트형 경쟁 6종목">
+<meta property="og:locale" content="ko_KR">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏸</text></svg>">
+<link rel="stylesheet" href="css/jua.css">
+<link rel="stylesheet" href="css/landing.css?v=1">
+</head>
+<body>
+
+<!-- ══════════ 배경 ══════════ -->
+<div class="bg-scene" aria-hidden="true">
+  <div class="bg-sky"></div>
+  <div class="bg-symbols" id="bgSymbols"></div>
+  <i class="cloud" style="width:180px;height:52px;top:10%;animation-duration:64s"></i>
+  <i class="cloud" style="width:130px;height:40px;top:26%;animation-duration:82s;animation-delay:-30s"></i>
+  <i class="cloud" style="width:220px;height:60px;top:44%;animation-duration:96s;animation-delay:-60s"></i>
+  <div class="bg-hills"></div>
+</div>
+
+<div class="wrap">
+
+  <!-- ══════════ 헤더 ══════════ -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-badge">🏸</span>
+      <span class="brand-txt">
+        <strong>수학 체육올림픽</strong>
+        <span>초등 6학년 2학기 · 6종목</span>
+      </span>
+    </div>
+    <div class="tools">
+      <button class="tool" id="modeBtn">📷 모드</button>
+      <button class="tool" id="volBtn">🔊</button>
+      <button class="tool" id="helpBtn">❓ 도움말</button>
+    </div>
+  </header>
+
+  <!-- ══════════ 히어로 ══════════ -->
+  <section class="hero">
+    <h1 class="hero-title">
+      <span class="jump" style="--d:0s">온</span><span class="jump" style="--d:.05s">몸</span><span class="jump" style="--d:.10s">으</span><span class="jump" style="--d:.15s">로</span>
+      <span class="jump hot" style="--d:.24s">수</span><span class="jump hot" style="--d:.29s">학</span>
+      <span class="jump" style="--d:.36s">!</span>
+    </h1>
+    <p class="hero-sub">카메라 앞에서 달리고 뛰고 때리며 푸는 6학년 2학기 수학</p>
+    <div class="hero-tags">
+      <span class="chip"><span class="blink-dot"></span> AI 모션인식</span>
+      <span class="chip">🏅 표적·투기 도전 &amp; 네트형 경쟁</span>
+      <span class="chip">⏱️ 한 종목 60초</span>
+    </div>
+  </section>
+</div>
+
+<div class="ticker" aria-hidden="true">
+  <div class="ticker-track" id="tickerTrack"></div>
+</div>
+
+<div class="wrap">
+  <!-- ══════════ 진행도 ══════════ -->
+  <div id="trophySlot"></div>
+
+  <!-- ══════════ 종목 ══════════ -->
+  <div class="sec-head">
+    <h2 class="sec-title">🎮 종목을 골라 보세요!</h2>
+    <p class="sec-sub">카드를 누르면 바로 시작해요 🚩</p>
+  </div>
+  <div class="grid" id="grid"></div>
+
+  <div class="cta-row">
+    <button class="cta" id="randomStartBtn">🎲 아무거나 하나 골라 줘!</button>
+  </div>
+
+  <!-- ══════════ 푸터 ══════════ -->
+  <footer class="foot">
+    <p class="foot-note">📄 카메라 영상은 저장되지 않아요 · 녹화 영상은 기기에만 저장됩니다</p>
+    <p class="foot-credit">
+      경북수학교육교사연구회 -수(數)다방-<br>
+      만든 사람 · 경북 소천초 교사 이응석
+    </p>
+  </footer>
+</div>
+
+<!-- ══════════ 조작 방식 ══════════ -->
+<div class="sheet" id="modeSheet">
+  <div class="sheet-box">
+    <h2 class="sheet-title">🕹️ 어떻게 조작할까요?</h2>
+    <p class="sheet-sub">6종목 모두 온몸을 쓰기 때문에 <b>모션인식</b>에서 가장 재미있어요.</p>
+    <div class="mode-row">
+      <button class="mode-btn" data-mode="motion">
+        <img src="assets/button1.png" alt="">
+        <div><b>📷 모션인식</b><small>카메라 앞에서 2~3걸음 물러나 온몸으로</small></div>
+      </button>
+      <button class="mode-btn" data-mode="touch">
+        <img src="assets/button2.png" alt="">
+        <div><b>👆 터치</b><small>태블릿 화면을 손가락으로</small></div>
+      </button>
+      <button class="mode-btn" data-mode="mouse">
+        <img src="assets/button3.png" alt="">
+        <div><b>🖱️ 마우스</b><small>PC에서 마우스로</small></div>
+      </button>
+    </div>
+    <button class="sheet-close" data-close>이걸로 할래요!</button>
+  </div>
+</div>
+
+<!-- ══════════ 도움말 ══════════ -->
+<div class="sheet" id="helpSheet">
+  <div class="sheet-box">
+    <h2 class="sheet-title">🏃 온몸으로 답을 때려요!</h2>
+    <p class="sheet-sub">정답을 손가락으로 고르는 게 아니라, 달려가고 뛰어서 맞혀요.</p>
+    <div class="help-steps">
+      <img src="assets/help1.png" alt="1단계 모션 인식은 손을 들어 준비, 2단계 터치 방식은 화면을 눌러 시작">
+      <img src="assets/help2.png" alt="3단계 60초 동안 신나게 게임하기, 4단계 사진과 영상 저장하기">
+    </div>
+    <p class="note">
+      <b>계산은 머리로 한 번, 답은 몸으로 한 번.</b><br>
+      셔틀콕 아래로 <b>달려가고</b>, 접시를 <b>쳐내고</b>, 공을 <b>내리꽂아요.</b><br>
+      3연속 맞히면 단계가 오르고, 마지막 10초는 <b>코인 2배</b>예요!
+    </p>
+    <button class="sheet-close" data-close>알겠어요!</button>
+  </div>
+</div>
+
+<script type="module">
+import { HighScore, InputMode, FileAudioLoop, showSoundHint } from "./js/engine.js?v=4";
+import { CHARACTERS, irisTransition } from "./js/party.js?v=2";
+
+const isMuted = () => localStorage.getItem("smo_muted") === "1";
+const bgm = new FileAudioLoop("assets/sounds/bgm.mp3", 0.35);
+if (!isMuted()) bgm.play(showSoundHint);
+
+// 카드 색은 종목마다 다르게 — 스테이지 셀렉트처럼 한눈에 구분되게 한다
+const UNITS = [
+  { id: "n1", emoji: "🏸", unit: "1단원 · 분수의 나눗셈", name: "분수 배드민턴",
+    motion: "상대와 진짜 랠리! 셔틀콕 아래로 달려가 자세로 방향을 정해요",
+    href: "games/u1-fracdiv.html", bg: "#FFE1E1" },
+  { id: "n2", emoji: "🎯", unit: "2단원 · 소수의 나눗셈", name: "소수점 클레이 사격",
+    motion: "떨어지는 접시 셋 중 정답만 손을 뻗어 쳐내요",
+    href: "games/u2-decdiv.html", bg: "#DCEEFF" },
+  { id: "n3", emoji: "🧊", unit: "3단원 · 공간과 입체", name: "쌓기나무 관제탑",
+    motion: "손을 크게 휘둘러 입체를 돌려 보고 카드를 쳐요",
+    href: "games/u3-solid.html", bg: "#DFF8E7" },
+  { id: "n4", emoji: "🏐", unit: "4단원 · 비례식과 비례배분", name: "비례 배구",
+    motion: "상대와 진짜 랠리! 때리는 타이밍이 곧 방향이에요",
+    href: "games/u4-ratio.html", bg: "#FFEAD1" },
+  { id: "n5", emoji: "🏹", unit: "5단원 · 원의 넓이", name: "원 과녁 샤프슈터",
+    motion: "흘러가는 정답 풍선을 활을 당겨 쏴요",
+    href: "games/u5-circle.html", bg: "#F1E4FF" },
+  { id: "n6", emoji: "🚀", unit: "6단원 · 원기둥·원뿔·구", name: "우주 화물 수송대",
+    motion: "컨베이어로 흘러오는 맞는 화물을 잡아요. 5연속이면 보너스!",
+    href: "games/u6-cylinder.html", bg: "#D9F5F7" },
+];
+
+function goToGame(href) {
+  bgm.stop();
+  irisTransition(() => { location.href = href; });
+}
+
+// 별은 따로 저장하지 않고 각 종목의 최고 기록에서 파생한다 (동메달 이상이면 ⭐)
+function hasStar(best) { return !!(best && best.label && !best.label.startsWith("🏅")); }
+
+let starCount = 0;
+const grid = document.getElementById("grid");
+UNITS.forEach((u, i) => {
+  const best = HighScore.get(u.id);
+  if (hasStar(best)) starCount++;
+  const card = document.createElement("button");
+  card.className = "card";
+  card.style.setProperty("--bg", u.bg);
+  card.style.setProperty("--i", i);
+  card.innerHTML = `
+    <span class="shine" aria-hidden="true"></span>
+    ${best ? `<span class="card-medal">${best.label.split(" ")[0]} 기록</span>` : ""}
+    <span class="card-top">
+      <span class="card-num">${i + 1}</span>
+      <span class="card-emoji">${u.emoji}</span>
+    </span>
+    <span class="card-unit">${u.unit}</span>
+    <span class="card-name">${CHARACTERS[u.id].emoji} ${u.name}</span>
+    <span class="card-motion">${u.motion}</span>
+    <span class="card-foot">
+      <span class="card-best">${best ? best.label : "아직 기록 없음"}</span>
+      <span class="card-go">시작 ▶</span>
+    </span>
+  `;
+  card.addEventListener("click", () => setTimeout(() => goToGame(u.href), 120));
+  grid.appendChild(card);
+});
+
+// 진행도 — 몇 종목에서 메달을 땄는지
+const trophy = document.getElementById("trophySlot");
+const done = starCount, total = UNITS.length;
+trophy.innerHTML = `
+  <div class="trophy ${done >= total ? "win" : ""}">
+    <span style="font-size:clamp(24px,4vw,34px)">${done >= total ? "🏆" : "🏅"}</span>
+    <span>${done >= total ? "6종목 모두 메달! 종합 우승!" : `메달 <b>${done}</b> / ${total} 종목`}</span>
+    <span class="trophy-bar"><i style="width:${(done / total) * 100}%"></i></span>
+  </div>`;
+
+document.getElementById("randomStartBtn").addEventListener("click", () => {
+  goToGame(UNITS[Math.floor(Math.random() * UNITS.length)].href);
+});
+
+// ── 배경에 떠오르는 수학 기호 ──
+const symbols = ["÷", "×", "π", "½", "3.14", "r", "＋", "∠", "㎤", "%", "⅓", "≒"];
+const bg = document.getElementById("bgSymbols");
+for (let i = 0; i < 14; i++) {
+  const s = document.createElement("i");
+  s.textContent = symbols[i % symbols.length];
+  s.style.left = `${Math.random() * 96}%`;
+  s.style.animationDuration = `${18 + Math.random() * 22}s`;
+  s.style.animationDelay = `${-Math.random() * 30}s`;
+  bg.appendChild(s);
+}
+
+// ── 흐르는 띠 ──
+const tickerWords = [
+  "🏸 분수 배드민턴", "🎯 소수점 클레이 사격", "🧊 쌓기나무 관제탑",
+  "🏐 비례 배구", "🏹 원 과녁 샤프슈터", "🚀 우주 화물 수송대",
+];
+const track = document.getElementById("tickerTrack");
+track.innerHTML = [...tickerWords, ...tickerWords].map((w) => `<span>${w}</span>`).join("");
+
+// ── 모달 ──
+function openSheet(el) { el.classList.add("open"); }
+function closeSheet(el) { el.classList.remove("open"); }
+document.querySelectorAll(".sheet").forEach((sheet) => {
+  sheet.addEventListener("click", (e) => { if (e.target === sheet) closeSheet(sheet); });
+  sheet.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => closeSheet(sheet)));
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") document.querySelectorAll(".sheet.open").forEach(closeSheet);
+});
+
+const modeSheet = document.getElementById("modeSheet");
+const modeBtn = document.getElementById("modeBtn");
+function refreshModeBtn() {
+  modeBtn.textContent = InputMode.label(InputMode.get());
+  document.querySelectorAll(".mode-btn").forEach((b) => {
+    b.classList.toggle("selected", b.dataset.mode === InputMode.get());
+  });
+}
+modeBtn.addEventListener("click", () => openSheet(modeSheet));
+document.querySelectorAll(".mode-btn").forEach((btn) => {
+  btn.addEventListener("click", () => { InputMode.set(btn.dataset.mode); refreshModeBtn(); });
+});
+refreshModeBtn();
+// 이번 브라우저 세션(탭)에서 아직 조작 방식을 안 물었다면 첫 진입에 한 번만 띄운다
+if (!sessionStorage.getItem("smo6_mode_shown")) {
+  sessionStorage.setItem("smo6_mode_shown", "1");
+  openSheet(modeSheet);
+}
+
+document.getElementById("helpBtn").addEventListener("click", () => openSheet(document.getElementById("helpSheet")));
+
+const volBtn = document.getElementById("volBtn");
+volBtn.addEventListener("click", () => {
+  const muted = localStorage.getItem("smo_muted") === "1";
+  localStorage.setItem("smo_muted", muted ? "0" : "1");
+  volBtn.textContent = muted ? "🔊" : "🔇";
+  bgm.setMuted(!muted);
+});
+if (localStorage.getItem("smo_muted") === "1") volBtn.textContent = "🔇";
+</script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node (필요시)
+node_modules/
+package-lock.json
+
+# 로컬 개발
+.env.local
+.env*.local
+
+# 배포 캐시
+.vercel/
+.next/
+out/
+.vercel
