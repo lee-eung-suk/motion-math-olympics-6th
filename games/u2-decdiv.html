@@ -106,7 +106,6 @@ let drifters = makeDrifters(8, dims.w, dims.h);
 window.addEventListener("resize", () => {
   dims = fitCanvasToScreen(canvas);
   drifters = makeDrifters(8, dims.w, dims.h);
-  if (round) layoutDiscs();
 });
 
 const sound = new SoundKit();
@@ -198,12 +197,12 @@ async function init() {
     unit: UNIT,
     title: "소수점 클레이 사격",
     lines: [
-      "나눗셈을 풀고, <b>답이 적힌 접시</b>를 떨어지기 전에 맞혀요!",
+      "접시 세 개가 <b>사방에서</b> 날아와요. 답이 적힌 접시를 쏘세요!",
       mode === "motion"
-        ? "<b>손을 뻗어 접시에 닿기만 하면</b> 바로 명중이에요."
-        : "<b>접시를 누르면</b> 바로 명중이에요.",
-      "접시 셋은 <b>숫자가 같고 소수점만 달라요.</b> 소수점을 잘 보세요!",
-      "<b>연속으로 맞힐수록 접시가 빨라져요.</b> 마지막 10초엔 코인 2배!",
+        ? "<b>두 손을 모으면</b> 총이 돼요. 손을 벌리면 안 나가요(안전장치)."
+        : "<b>화면을 누르고 있으면</b> 발사돼요.",
+      "조준경이 접시에 닿으면 <b>탕!</b> 하고 나가요.",
+      "총알은 <b>세 발</b>! 엉뚱한 접시를 깨면 한 발 줄어요.",
     ],
   });
 
@@ -229,7 +228,18 @@ let cursors = [];
 let lastFrameAt = 0;
 
 const NEXT_MS = 320;   // 다음 것이 거의 바로 온다 — 끊기면 리듬이 죽는다
-const GROUND = 0.88;            // 접시가 여기 닿으면 놓침
+const AMMO = 3;        // 한 문제에 세 발 — 아무 데나 쏘면 총알이 없다
+let ammo = AMMO;
+
+// ── 조준 ──
+// 예전에는 손을 접시에 갖다 대면 명중이었다. 마우스 커서와 완전히 같은 동작이라
+// 카메라를 켤 이유가 없었다. 이제 <두 손을 모아 총을 만들어야> 쏠 수 있다.
+// 손을 벌리면 안전장치가 걸려 발사되지 않으므로, 총구 관리가 게임의 일부가 된다.
+const AIM_JOIN = 0.85;      // 두 손 사이가 어깨 너비의 이 배 이내여야 "총을 모은 것"
+const SHOT_COOL = 420;
+let aim = { x: 0, y: 0 };
+let armed = false;          // 지금 쏠 수 있는 상태인가
+let lastShotAt = 0, recoil = 0;
 
 // 연속 성공을 크게 알려 준다 — 잘하고 있다는 게 눈에 보여야 계속 몸을 쓴다
 let streakMsg = null;
@@ -275,23 +285,46 @@ function fallMs() {
 }
 function level1() { return autoDiff.level === 1; }
 
-function layoutDiscs() {
-  const { w } = dims;
-  const n = discs.length || 3;
-  for (let i = 0; i < discs.length; i++) discs[i].x = w * (0.2 + 0.3 * i);
+// ── 접시 궤도 ──
+// 예전에는 세 접시가 전부 위에서 아래로 곧게 떨어졌다. 클레이 사격이라면
+// 사방에서 날아와야 한다. 세 가지 궤도를 섞어 쓴다.
+function makePath(kind) {
+  const { w, h } = dims;
+  const dir = Math.random() < 0.5 ? 1 : -1;
+  if (kind === "arc") {
+    // 아래 구석에서 비스듬히 솟아올라 반대쪽으로 떨어진다 — 진짜 클레이
+    const x0 = dir > 0 ? -w * 0.08 : w * 1.08;
+    const x1 = dir > 0 ? w * 1.08 : -w * 0.08;
+    // 최고점을 0.15h 로 두면 접시가 HUD·깃발 뒤로 숨는다
+    const y0 = h * 0.92, peak = h * (0.26 + Math.random() * 0.10);
+    return (t) => ({ x: x0 + (x1 - x0) * t, y: y0 - (y0 - peak) * (4 * t * (1 - t)) });
+  }
+  if (kind === "cross") {
+    // 옆에서 가로질러 간다 (살짝 기울여서)
+    const x0 = dir > 0 ? -w * 0.08 : w * 1.08;
+    const x1 = dir > 0 ? w * 1.08 : -w * 0.08;
+    const y0 = h * (0.26 + Math.random() * 0.34);
+    const y1 = y0 + h * (Math.random() * 0.22 - 0.11);
+    return (t) => ({ x: x0 + (x1 - x0) * t, y: y0 + (y1 - y0) * t });
+  }
+  // 위에서 비스듬히 떨어진다
+  const x0 = w * (0.18 + Math.random() * 0.64);
+  const x1 = Math.max(w * 0.05, Math.min(w * 0.95, x0 + dir * w * 0.34));
+  return (t) => ({ x: x0 + (x1 - x0) * t, y: -h * 0.06 + h * 1.02 * t });
 }
 
 function newRound() {
   round = genRound(autoDiff.level);
   const dur = fallMs();
-  // 접시마다 조금씩 시차를 둬야 한 번에 세 개가 나란히 내려오지 않고 리듬이 생긴다
-  const offs = shuffle([0, 0.10, 0.20]);
+  // 접시마다 조금씩 시차를 둬야 한 번에 세 개가 나란히 지나가지 않고 리듬이 생긴다
+  const offs = shuffle([0, 0.12, 0.24]);
+  const kinds = shuffle(["arc", "cross", "drop"]);
   discs = round.options.map((o, i) => ({
     ...o, x: 0, y: 0, r: 0, at: performance.now() + offs[i] * dur, dur,
-    hit: false, spin: Math.random() * 6.28,
+    path: makePath(kinds[i]), hit: false, spin: Math.random() * 6.28,
   }));
-  layoutDiscs();
   bursts = [];
+  ammo = AMMO;
   resolving = false;
   motion.reset();
   roundAt = performance.now();
@@ -347,7 +380,7 @@ function beginPlay() {
 function hitDisc(d) {
   if (resolving || d.hit) return;
   d.hit = true;
-  resolving = true;
+  resolving = true;   // 정답이면 여기서 라운드가 끝난다 (오답이면 아래에서 되돌린다)
   bursts.push({ x: d.x, y: d.y, at: performance.now(), ok: d.ok });
   shake.trigger(d.ok ? 10 : 6, 180);
   if (d.ok) {
@@ -364,18 +397,24 @@ function hitDisc(d) {
       spawnConfetti(confetti, d.x, d.y, 44);
       if (!isMuted()) sound.fever();
     }
-  } else {
-    party.wrong(d.x, d.y, `정답은 ${fmt(round.ans)}`);
-    autoDiff.reportWrong();
-    missStreak++;
-    if (!isMuted()) sound.wrong();
+    setTimeout(() => { if (state === "playing") newRound(); }, NEXT_MS);
+    return;
   }
-  setTimeout(() => { if (state === "playing") newRound(); }, NEXT_MS);
+  // 오답 접시를 깨뜨렸다 — 총알 한 발만 잃고 라운드는 이어진다.
+  // 계산은 맞았는데 총구가 스쳐서 라운드가 끝나 버리면, 아이는 수학이 아니라
+  // 조작을 원망하게 된다. 세 발 안에 정답 접시를 맞히면 된다.
+  resolving = false;
+  ammo--;
+  party.judge(d.x, d.y, "빗나감!", CUTE.blue);
+  if (!isMuted()) sound.fizzle();
+  if (ammo <= 0) missAll();
 }
 
 function missAll() {
+  if (resolving) return;
   resolving = true;
-  party.wrong(dims.w * 0.5, dims.h * GROUND, "놓쳤어요!");
+  missStreak++;
+  party.wrong(dims.w * 0.5, dims.h * 0.55, ammo <= 0 ? "총알을 다 썼어요!" : "놓쳤어요!");
   autoDiff.reportWrong();
   if (!isMuted()) sound.wrong();
   shake.trigger(5, 150);
@@ -435,24 +474,82 @@ function goReady() {
   }, 500);
 }
 
-// ── 손이 접시에 닿았는가 ──
-function checkHits() {
-  if (resolving) return;
-  const pts = [];
+// ── 조준 · 발사 ──
+// 모션: 두 손목의 중점이 조준점이고, 두 손을 모아야 발사된다(손을 벌리면 안전장치).
+// 터치·마우스: 커서가 조준점이고, 누르고 있는 동안 발사된다.
+function readAim(dt) {
   if (mode === "motion") {
     const f = motion.last;
-    if (f) { pts.push(f.lw, f.rw); }
+    if (!f) { armed = false; return; }
+    const mx = (f.lw.x + f.rw.x) / 2, my = (f.lw.y + f.rw.y) / 2;
+    aim.x += (mx - aim.x) * Math.min(1, dt * 18);
+    aim.y += (my - aim.y) * Math.min(1, dt * 18);
+    armed = Math.hypot(f.rw.x - f.lw.x, f.rw.y - f.lw.y) / f.unit <= AIM_JOIN;
   } else {
-    // 터치·마우스는 누른 상태로 접시를 스치면 명중 (한 프레임짜리 클릭도 잡는다)
-    const down = pointerInput && (pointerInput.down || pointerInput.consumeJustDown());
-    if (down && cursors[0]) pts.push(cursors[0]);
+    const p = cursors[0];
+    if (p) { aim.x = p.x; aim.y = p.y; }
+    armed = !!(pointerInput && (pointerInput.down || pointerInput.consumeJustDown()));
   }
+  recoil = Math.max(0, recoil - dt * 3.2);
+}
+
+function aimRadius() {
+  return fluidPx(dims, 34, { min: 24, max: 48 }) * (0.62 + recoil * 0.8);
+}
+
+function checkHits() {
+  if (resolving || !armed || ammo <= 0) return;
+  const now = performance.now();
+  if (now - lastShotAt < SHOT_COOL) return;
+  const ar = aimRadius();
   for (const d of discs) {
-    if (d.hit || d.y <= 0) continue;
-    for (const p of pts) {
-      if (Math.hypot(p.x - d.x, p.y - d.y) <= d.r * 1.15) { hitDisc(d); return; }
+    if (d.hit || d.r === 0 || d.y === 0) continue;
+    if (Math.hypot(aim.x - d.x, aim.y - d.y) <= d.r + ar * 0.35) {
+      lastShotAt = now;
+      recoil = 1;
+      shake.trigger(6, 130);
+      if (!isMuted()) sound.shot();
+      hitDisc(d);
+      return;
     }
   }
+}
+
+function drawAim(ctx) {
+  const r = aimRadius();
+  ctx.save();
+  ctx.globalAlpha = armed ? 0.95 : 0.45;
+  ctx.strokeStyle = armed ? CUTE.red : "#fff";
+  ctx.lineWidth = Math.max(3, r * 0.13);
+  ctx.beginPath(); ctx.arc(aim.x, aim.y, r, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(aim.x - r * 1.5, aim.y); ctx.lineTo(aim.x - r * 0.45, aim.y);
+  ctx.moveTo(aim.x + r * 0.45, aim.y); ctx.lineTo(aim.x + r * 1.5, aim.y);
+  ctx.moveTo(aim.x, aim.y - r * 1.5); ctx.lineTo(aim.x, aim.y - r * 0.45);
+  ctx.moveTo(aim.x, aim.y + r * 0.45); ctx.lineTo(aim.x, aim.y + r * 1.5);
+  ctx.stroke();
+  ctx.restore();
+  if (mode === "motion" && !armed) {
+    const fs = fluidPx(dims, 15, { min: 11, max: 20 });
+    drawChunkyText(ctx, "두 손을 모아야 쏴져요!", aim.x, aim.y + r * 2.1, fs, "#fff",
+      { outline: CUTE.ink, outlineWidth: Math.max(3, fs * 0.24) });
+  }
+}
+
+// 남은 탄약 — 아무 데나 쏘면 총알이 떨어진다
+function drawAmmo(ctx) {
+  const { w, h } = dims;
+  const r = fluidPx(dims, 11, { min: 8, max: 15 });
+  const y = h * 0.855, gap = r * 3.0;
+  const x0 = w * 0.5 - (gap * (AMMO - 1)) / 2;
+  for (let i = 0; i < AMMO; i++) {
+    const live = i < ammo;
+    drawSticker(ctx, x0 + gap * i, y, r, live ? PARTY.gold : "rgba(255,255,255,0.30)",
+      { lineWidth: Math.max(2, r * 0.28) });
+  }
+  const fs = fluidPx(dims, 13, { min: 10, max: 18 });
+  drawChunkyText(ctx, "🔫 남은 총알", w * 0.5, y + r * 2.3, fs, "#fff",
+    { outline: CUTE.ink, outlineWidth: Math.max(2.5, fs * 0.24) });
 }
 
 // ── 접시 ──
@@ -468,7 +565,8 @@ function drawDiscs(ctx, now) {
     if (d.hit) continue;
     if (t >= 1) continue;
     alive++;
-    d.y = h * 0.30 + (h * GROUND - h * 0.30) * t;
+    const pos = d.path(t);
+    d.x = pos.x; d.y = pos.y;
     d.spin += 0.05;
 
     ctx.save();
@@ -509,23 +607,13 @@ function drawDiscs(ctx, now) {
   }
 }
 
-function drawGround(ctx) {
-  const { w, h } = dims;
-  ctx.save();
-  ctx.strokeStyle = "rgba(255,255,255,0.5)";
-  ctx.lineWidth = fluidPx(dims, 3, { min: 2, max: 4.5 });
-  ctx.setLineDash([12, 10]);
-  ctx.beginPath(); ctx.moveTo(0, h * GROUND); ctx.lineTo(w, h * GROUND); ctx.stroke();
-  ctx.restore();
-}
-
 function drawHype(ctx, remain) {
   const { w, h } = dims;
   if (remain < 10000) {
     const fs = fluidPx(dims, 24, { min: 17, max: 33 });
     const puls = 1 + Math.sin(performance.now() / 120) * 0.08;
     ctx.save();
-    ctx.translate(w * 0.5, h * 0.25); ctx.scale(puls, puls);
+    ctx.translate(w * 0.5, h * 0.34); ctx.scale(puls, puls);
     drawChunkyText(ctx, "🔥 라스트 스퍼트! 코인 2배", 0, 0, fs, CUTE.red,
       { outline: "#fff", outlineWidth: Math.max(4, fs * 0.24) });
     ctx.restore();
@@ -559,9 +647,15 @@ function loop(tsMs) {
   if (mode === "motion") {
     const f = motion.last;
     if (f) {
-      const r = fluidPx(dims, 26, { min: 19, max: 36 });
+      const r = fluidPx(dims, 24, { min: 17, max: 33 });
+      // 두 손을 잇는 선 — 모였는지 벌어졌는지가 한눈에 보여야 한다
+      ctx.save();
+      ctx.strokeStyle = armed ? CUTE.red : "rgba(255,255,255,0.7)";
+      ctx.lineWidth = Math.max(3, r * 0.22);
+      ctx.beginPath(); ctx.moveTo(f.lw.x, f.lw.y); ctx.lineTo(f.rw.x, f.rw.y); ctx.stroke();
+      ctx.restore();
       for (const k of ["lw", "rw"]) {
-        drawSticker(ctx, f[k].x, f[k].y, r, PARTY.gold, { lineWidth: Math.max(3, r * 0.15) });
+        drawSticker(ctx, f[k].x, f[k].y, r, armed ? CUTE.red : PARTY.gold, { lineWidth: Math.max(3, r * 0.15) });
         drawChunkyText(ctx, "✊", f[k].x, f[k].y, r * 1.0, "#fff", { outline: CUTE.ink, outlineWidth: 2 });
       }
     } else if (state === "playing") {
@@ -583,9 +677,11 @@ function stepGame() {
   if (remain <= 0) { endGame(); return; }
   const now = performance.now();
 
-  drawGround(ctx);
   drawDiscs(ctx, now);
+  readAim(dt);
   checkHits();
+  if (!resolving) drawAim(ctx);
+  drawAmmo(ctx);
 
   const br = fluidPx(dims, 20, { min: 15, max: 27 });
   drawMascot(ctx, w * 0.94, h * 0.94, br, CHAR, party.currentMood(remain));
@@ -598,7 +694,7 @@ function stepGame() {
   drawHype(ctx, remain);
 
   drawChunkyText(ctx,
-    mode === "motion" ? "손을 뻗어 정답 접시를 쳐요! 바닥에 닿기 전에" : "정답 접시를 눌러요! 바닥에 닿기 전에",
+    mode === "motion" ? "두 손을 모아 조준! 정답 접시를 쏘세요" : "누른 채로 조준! 정답 접시를 쏘세요",
     w * 0.5, h * 0.965, fluidPx(dims, 14, { min: 11, max: 19 }), "#fff",
     { outline: CUTE.ink, outlineWidth: fluidPx(dims, 5, { min: 3.5, max: 7 }) });
 

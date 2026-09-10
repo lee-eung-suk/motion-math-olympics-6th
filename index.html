@@ -108,7 +108,6 @@
         <div><b>🖱️ 마우스</b><small>PC에서 마우스로</small></div>
       </button>
     </div>
-    <button class="sheet-close" data-close>이걸로 할래요!</button>
   </div>
 </div>
 
@@ -141,22 +140,22 @@ if (!isMuted()) bgm.play(showSoundHint);
 // 카드 색은 종목마다 다르게 — 스테이지 셀렉트처럼 한눈에 구분되게 한다
 const UNITS = [
   { id: "n1", emoji: "🏸", unit: "1단원 · 분수의 나눗셈", name: "분수 배드민턴",
-    motion: "상대와 진짜 랠리! 셔틀콕 아래로 달려가 자세로 방향을 정해요",
+    motion: "정답이 적힌 셔틀콕만 골라 받아쳐요! 점프하면 스매시",
     href: "games/u1-fracdiv.html", bg: "#FFE1E1" },
   { id: "n2", emoji: "🎯", unit: "2단원 · 소수의 나눗셈", name: "소수점 클레이 사격",
-    motion: "떨어지는 접시 셋 중 정답만 손을 뻗어 쳐내요",
+    motion: "두 손을 모아 총을 만들고, 사방에서 날아오는 접시를 쏴요",
     href: "games/u2-decdiv.html", bg: "#DCEEFF" },
-  { id: "n3", emoji: "🧊", unit: "3단원 · 공간과 입체", name: "쌓기나무 관제탑",
-    motion: "손을 크게 휘둘러 입체를 돌려 보고 카드를 쳐요",
+  { id: "n3", emoji: "🧊", unit: "3단원 · 공간과 입체", name: "쌓기나무 표적 던지기",
+    motion: "흘러가는 정답 카드에 공을 던져 맞혀요",
     href: "games/u3-solid.html", bg: "#DFF8E7" },
   { id: "n4", emoji: "🏐", unit: "4단원 · 비례식과 비례배분", name: "비례 배구",
-    motion: "상대와 진짜 랠리! 때리는 타이밍이 곧 방향이에요",
+    motion: "정답 칸 앞으로 달려가 서고, 점프해서 내리꽂아요",
     href: "games/u4-ratio.html", bg: "#FFEAD1" },
-  { id: "n5", emoji: "🏹", unit: "5단원 · 원의 넓이", name: "원 과녁 샤프슈터",
-    motion: "흘러가는 정답 풍선을 활을 당겨 쏴요",
+  { id: "n5", emoji: "🏹", unit: "5단원 · 원의 넓이", name: "원 넓이 양궁",
+    motion: "넓이가 곧 원의 크기! 활을 당겨 정답 원을 쏴요",
     href: "games/u5-circle.html", bg: "#F1E4FF" },
   { id: "n6", emoji: "🚀", unit: "6단원 · 원기둥·원뿔·구", name: "우주 화물 수송대",
-    motion: "컨베이어로 흘러오는 맞는 화물을 잡아요. 5연속이면 보너스!",
+    motion: "맞는 화물 앞에 서서 앉았다 일어서면 번쩍! 5연속이면 보너스",
     href: "games/u6-cylinder.html", bg: "#D9F5F7" },
 ];
 
@@ -224,8 +223,8 @@ for (let i = 0; i < 14; i++) {
 
 // ── 흐르는 띠 ──
 const tickerWords = [
-  "🏸 분수 배드민턴", "🎯 소수점 클레이 사격", "🧊 쌓기나무 관제탑",
-  "🏐 비례 배구", "🏹 원 과녁 샤프슈터", "🚀 우주 화물 수송대",
+  "🏸 분수 배드민턴", "🎯 소수점 클레이 사격", "🧊 쌓기나무 표적 던지기",
+  "🏐 비례 배구", "🏹 원 넓이 양궁", "🚀 우주 화물 수송대",
 ];
 const track = document.getElementById("tickerTrack");
 track.innerHTML = [...tickerWords, ...tickerWords].map((w) => `<span>${w}</span>`).join("");
@@ -251,7 +250,13 @@ function refreshModeBtn() {
 }
 modeBtn.addEventListener("click", () => openSheet(modeSheet));
 document.querySelectorAll(".mode-btn").forEach((btn) => {
-  btn.addEventListener("click", () => { InputMode.set(btn.dataset.mode); refreshModeBtn(); });
+  // 고르는 순간 바로 닫는다 — 확인 버튼을 한 번 더 누르게 하지 않는다.
+  // 240ms 는 "내가 이걸 골랐구나"를 눈으로 확인할 만큼만 기다리는 시간이다.
+  btn.addEventListener("click", () => {
+    InputMode.set(btn.dataset.mode);
+    refreshModeBtn();
+    setTimeout(() => closeSheet(modeSheet), 240);
+  });
 });
 refreshModeBtn();
 // 이번 브라우저 세션(탭)에서 아직 조작 방식을 안 물었다면 첫 진입에 한 번만 띄운다

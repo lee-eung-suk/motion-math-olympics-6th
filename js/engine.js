@@ -640,6 +640,25 @@ export class PoseMotion {
     return best;
   }
 
+  // 몸통이 움직인 만큼을 뺀 손목 속도 — <달리는 중에도 팔을 휘둘렀는지>만 잡아낸다.
+  // swing() 은 손목의 절대 속도라, 코트를 좌우로 뛰면 손목도 몸과 함께 실려 가서
+  // 달리기가 스윙으로 오인된다. 네트형 종목(달리면서 친다)에서는 반드시 이쪽을 써야 한다.
+  swingRel(ms = 180) {
+    const last = this.last, o = this._back(ms);
+    if (!last || !o || last.t <= o.t) return null;
+    const dt = (last.t - o.t) / 1000;
+    const bx = last.sc.x - o.sc.x, by = last.sc.y - o.sc.y;
+    let best = null;
+    for (const k of ["lw", "rw"]) {
+      const dx = (last[k].x - o[k].x) - bx, dy = (last[k].y - o[k].y) - by;
+      const speed = Math.hypot(dx, dy) / last.unit / dt;
+      if (!best || speed > best.speed) {
+        best = { hand: k, speed, dx, dy, x: last[k].x, y: last[k].y, angle: Math.atan2(dy, dx) };
+      }
+    }
+    return best;
+  }
+
   // 도약 — 서서 뛰면 어깨가 솟고, 앉아서 하면 두 팔이 솟는다. 둘 중 큰 쪽을 세기로 삼아
   // 교실에서 서든 앉든 모두 인식되게 한다.
   jump(ms = 320) {

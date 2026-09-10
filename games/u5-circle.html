@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>원 과녁 샤프슈터 · 종목 5</title>
+<title>원 넓이 양궁 · 종목 5</title>
 <link rel="stylesheet" href="../css/style.css?v=6">
 </head>
 <body>
@@ -18,7 +18,7 @@
   </div>
 
   <div class="overlay-panel" id="loadingPanel">
-    <h2>🏹 원 과녁 샤프슈터</h2>
+    <h2>🏹 원 넓이 양궁</h2>
     <p id="loadingText">준비 중…</p>
   </div>
 
@@ -28,7 +28,7 @@
         <div class="rule-char">🦌</div>
         <div>
           <div class="rule-name">샤프</div>
-          <h2 class="rule-title">원 과녁 샤프슈터</h2>
+          <h2 class="rule-title">원 넓이 양궁</h2>
         </div>
       </div>
       <p class="rule-cheer"></p>
@@ -93,7 +93,7 @@ import {
 requestWakeLock();
 
 const UNIT = "n5";
-const TITLE = "원 과녁 샤프슈터";
+const TITLE = "원 넓이 양궁";
 const RECORD_SUFFIX = "발 명중";
 const MEDALS = { bronze: 3, silver: 6, gold: 9 };
 const CHAR = CHARACTERS[UNIT];
@@ -123,63 +123,78 @@ function randInt(min, max) { return min + Math.floor(Math.random() * (max - min 
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 function fmt(v) { return Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/\.?0+$/, ""); }
 
-// 과녁의 동심원.
-// 처음엔 교과서 예시대로 10·20·30·40 cm를 썼는데, 바깥 링(40)이 가장 맞히기 쉬운 자리라
-// 겨냥이 서툰 아이일수록 40×40×3.14=5024 같은 큰 수를 만나게 되는 문제가 있었다.
-// 반지름을 5·10·15·20으로 낮춰 어떤 링에 맞아도 계산이 감당되게 한다.
-const RINGS = [5, 10, 15, 20];
+function round2(v) { return +(+v).toFixed(2); }
 
 // ---------------------------------------------------------------------------
-// 문제 만들기
+// 문제 만들기 — 「원의 넓이」로 통일했다.
 //
-// 오답은 아이들이 실제로 하는 실수를 그대로 흉내 낸다 —
-// 넓이 자리에 원주 공식을 쓰거나(2×r×3.14), 3.14를 한 번만 곱하거나,
-// 지름을 반지름 자리에 넣는 것.
+// 예전에는 화면 가운데에 5·10·15·20 동심원 <과녁>이 있고, 정답은 그 과녁이 아니라
+// 따로 떠다니는 풍선을 쏴서 골랐다. 표적이 두 개라 아이가 무엇을 맞혀야 하는지
+// 알 수 없었고, 과녁의 점수 링은 실제 점수와도 아무 상관이 없었다. 그래서 과녁을 없애고
+// <표적 자체를 원>으로 만들었다. 표적 원의 화면 크기는 √넓이에 비례한다 —
+// 넓이가 4배면 원이 정확히 2배 커지므로, 고른 답이 맞는지 눈으로도 가늠할 수 있다.
 // ---------------------------------------------------------------------------
-function genQuiz(level, r) {
+
+// 오답 세 값 중 정답이 늘 가운데면 계산하지 않고 <가운데 고르기>로 이길 수 있다.
+// (넓이 r×r×3.14 는 원주 2×r×3.14 보다 크고 지름을 넣은 값보다 작아서, 예전엔 실제로
+//  r ≥ 3 인 모든 문제에서 정답이 가운데 값이었다.) 순위를 먼저 뽑아 골고루 나오게 한다.
+function pickWrongs(ans, cands) {
+  const uniq = [...new Set(cands.map(round2))].filter((v) => v > 0 && v !== ans && v < 2000);
+  const below = shuffle(uniq.filter((v) => v < ans));
+  const above = shuffle(uniq.filter((v) => v > ans));
+  for (const rank of shuffle([0, 1, 2])) {
+    if (rank === 0 && above.length >= 2) return [above[0], above[1]];
+    if (rank === 1 && below.length >= 1 && above.length >= 1) return [below[0], above[0]];
+    if (rank === 2 && below.length >= 2) return [below[0], below[1]];
+  }
+  const out = [...below, ...above].slice(0, 2);
+  while (out.length < 2) {
+    const v = round2(ans * (0.45 + Math.random() * 1.1));
+    if (v > 0 && v !== ans && !out.includes(v)) out.push(v);
+  }
+  return out;
+}
+
+function genQuiz(level) {
   if (level === 1) {
-    // 원주 = 지름 x 3.14
-    const ans = +(2 * r * PI).toFixed(2);
+    // ⭐1 — 반지름을 그대로 주고 공식에 넣기만 하면 된다
+    const r = randInt(2, 5);
+    const ans = round2(r * r * PI);
     return {
-      q: `반지름 ${r} cm 원의 <원주>는?`,
-      sub: `${2 * r} × 3.14 = ?`,
-      formula: "원주 = 지름 × 3.14",
-      ans, unitText: "cm",
-      wrongs: [+(r * PI).toFixed(2), +(r * r * PI).toFixed(2)],
+      q: `반지름 ${r}cm 원의 「넓이」는?`,
+      sub: `${r} × ${r} × 3.14 = ?`,
+      formula: "넓이 = 반지름 × 반지름 × 3.14",
+      ans, unitText: "cm²",
+      // 반지름을 지름으로 착각 / 3.14 를 빠뜨림 / 원주 공식과 혼동 / 지름끼리 곱함
+      wrongs: pickWrongs(ans, [(2 * r) * (2 * r) * PI, r * r, 2 * r * PI, r * PI, (2 * r) * (2 * r)]),
     };
   }
   if (level === 2) {
-    // 원의 넓이 = 반지름 x 반지름 x 3.14
-    const ans = +(r * r * PI).toFixed(2);
+    // ⭐2 — 지름을 준다. 반으로 나눠 반지름을 만드는 한 걸음이 더 있다
+    const d = randInt(3, 6) * 2;
+    const r = d / 2;
+    const ans = round2(r * r * PI);
     return {
-      q: `반지름 ${r} cm 원의 <넓이>는?`,
-      sub: `${r} × ${r} × 3.14 = ?`,
-      formula: "넓이 = 반지름 × 반지름 × 3.14",
+      q: `지름 ${d}cm 원의 「넓이」는?`,
+      sub: `반지름은 ${r}cm → ${r} × ${r} × 3.14 = ?`,
+      formula: "지름을 반으로 나누면 반지름이에요",
       ans, unitText: "cm²",
-      wrongs: [+(2 * r * PI).toFixed(2), +(2 * r * 2 * r * PI).toFixed(2)],
+      // 지름을 그대로 넣음 / 3.14 를 빠뜨림 / 원주 공식과 혼동
+      wrongs: pickWrongs(ans, [d * d * PI, d * d, d * PI, 2 * r * PI, r * r]),
     };
   }
-  // ⭐3 도넛 구역 — 맞힌 링과 그 안쪽 링 사이의 넓이
-  const idx = RINGS.indexOf(r);
-  const inner = idx > 0 ? RINGS[idx - 1] : 0;
-  if (inner === 0) {
-    const ans = +(r * r * PI).toFixed(2);
-    return {
-      q: `한가운데 반지름 ${r} cm 원의 <넓이>는?`,
-      sub: `${r} × ${r} × 3.14 = ?`,
-      formula: "넓이 = 반지름 × 반지름 × 3.14",
-      ans, unitText: "cm²",
-      wrongs: [+(2 * r * PI).toFixed(2), +(r * PI).toFixed(2)],
-    };
-  }
-  const ans = +((r * r - inner * inner) * PI).toFixed(2);
+  // ⭐3 — 가운데를 도려낸 고리의 넓이
+  const out = randInt(4, 7);
+  const inn = randInt(1, out - 2);
+  const ans = round2((out * out - inn * inn) * PI);
   return {
-    q: `반지름 ${inner} cm와 ${r} cm 사이 <고리 구역의 넓이>는?`,
-    sub: `(${r}×${r} − ${inner}×${inner}) × 3.14 = ?`,
-    formula: "고리 넓이 = (큰 원 넓이) − (작은 원 넓이)",
+    q: `바깥 반지름 ${out}cm, 안쪽 반지름 ${inn}cm 「고리의 넓이」는?`,
+    sub: `(${out}×${out} − ${inn}×${inn}) × 3.14 = ?`,
+    formula: "고리 넓이 = 큰 원 넓이 − 작은 원 넓이",
     ans, unitText: "cm²",
     // 빼는 것을 잊거나, 반지름끼리 먼저 빼고 제곱하는 실수
-    wrongs: [+(r * r * PI).toFixed(2), +((r - inner) * (r - inner) * PI).toFixed(2)],
+    wrongs: pickWrongs(ans, [out * out * PI, (out - inn) * (out - inn) * PI,
+                             inn * inn * PI, (out * out + inn * inn) * PI]),
   };
 }
 
@@ -206,14 +221,14 @@ async function init() {
 
   await showRuleCard({
     unit: UNIT,
-    title: "원 과녁 샤프슈터",
+    title: "원 넓이 양궁",
     lines: [
-      "문제를 풀고, <b>답이 적힌 풍선</b>을 활로 쏘면 돼요!",
-      "풍선은 <b>좌우로 흘러가요.</b> 화면 밖으로 나가기 전에 쏘세요.",
+      "넓이를 계산하고, <b>그 답이 적힌 원</b>을 활로 쏘면 돼요!",
+      "<b>원의 크기가 곧 넓이예요.</b> 넓이가 4배면 원도 2배 커져요.",
       mode === "motion"
         ? "<b>앞손으로 겨누고</b>, 뒷손을 <b>뒤로 당겼다 놓으면</b> 발사!"
         : "<b>겨눈 곳을 눌렀다 떼면</b> 발사!",
-      "<b>연속으로 맞힐수록 풍선이 빨라져요.</b> 마지막 10초엔 코인 2배!",
+      "빗나가도 괜찮아요 — <b>시간 안에 몇 번이든</b> 다시 쏠 수 있어요.",
     ],
   });
 
@@ -231,6 +246,7 @@ const startGate = new StartGate(mode, holdFill);
 let autoDiff, count, playEndAt;
 let round = null, roundAt, resolving = false;
 let balloons = [], arrow = null, judgedOk = false;
+let shots = 0;      // 이 문제에서 쏜 횟수 (한 발에 맞히면 퍼펙트)
 let aim = { x: 0, y: 0 };
 let draw = 0;              // 시위를 당긴 정도 0~1
 let confetti = [], sparks = [];
@@ -294,29 +310,39 @@ function driftMs() {
   return base * Math.max(0.6, 1 - party.combo * 0.04) * (isSpurt() ? 0.85 : 1);
 }
 
-function targetCenter() { return { x: dims.w * 0.5, y: dims.h * 0.40 }; }
-function targetRadius() { return Math.min(dims.w * 0.22, dims.h * 0.17); }
+// 표적 원의 화면 반지름 — √넓이에 비례시킨다.
+// 넓이가 4배인 원은 반지름이 2배다. 그래서 <숫자가 큰 표적이 실제로 크게> 보인다.
+// 다만 오답까지 포함하면 값의 폭이 15배까지 벌어져 화면을 벗어나므로 위아래를 잘라 둔다.
+function targetRadius(v) {
+  const { h } = dims;
+  return Math.max(h * 0.040, Math.min(h * 0.125, h * 0.0105 * Math.sqrt(Math.max(1, v))));
+}
 
+// 세 표적은 한 줄 위를 같은 방향으로 흘러가며 화면 끝에서 반대편으로 돌아온다.
+// 위아래로 흩어 놓으면 큰 원끼리 겹쳐 숫자가 가려진다.
 function layoutBalloons() {
   if (!balloons.length) return;
   const { h } = dims;
-  for (let i = 0; i < balloons.length; i++) balloons[i].baseY = h * (0.60 + (i % 2) * 0.11);
+  for (const b of balloons) b.baseY = h * 0.62;
+}
+
+function roundMs() {
+  return autoDiff.level === 1 ? 14000 : autoDiff.level === 2 ? 12000 : 10000;
 }
 
 function newRound() {
-  // 예전에는 과녁을 한 번 쏴서 반지름을 정하고, 계산한 뒤 <또 한 발>을 쐈다.
-  // 한 문제에 12초씩 걸려 리듬이 죽었다. 이제 반지름은 바로 주어지고 한 발로 끝난다.
-  const r = RINGS[randInt(0, RINGS.length - 1)];
-  const quiz = genQuiz(autoDiff.level, r);
+  const quiz = genQuiz(autoDiff.level);
   const opts = shuffle([{ v: quiz.ans, ok: true }, ...quiz.wrongs.map((v) => ({ v, ok: false }))]);
-  const dur = driftMs();
+  const dir = Math.random() < 0.5 ? 1 : -1;
+  const speed = dims.w / (driftMs() / 1000);   // 초당 몇 px 흘러가는가
   balloons = opts.map((o, i) => ({
-    ...o, baseY: 0, y: 0, r: 0, popped: false, phase: Math.random() * 6.28,
-    dir: i % 2 === 0 ? 1 : -1, at: performance.now() + i * dur * 0.10, dur,
+    ...o, baseY: 0, r: 0, popped: false, phase: Math.random() * 6.28,
+    x: dims.w * (0.2 + i * 0.3), y: 0, vx: speed * dir,
   }));
   layoutBalloons();
-  round = { hitR: r, quiz };
+  round = { quiz, ms: roundMs() };
   resolving = false; judgedOk = false; arrow = null;
+  shots = 0;
   draw = 0; lastDrawUnits = 0;
   motion.reset();
   roundAt = performance.now();
@@ -373,6 +399,7 @@ function beginPlay() {
 function fire() {
   if (arrow || resolving) return;
   arrow = { tx: aim.x, ty: aim.y, born: performance.now() };
+  shots++;
   draw = 0;
   if (!isMuted()) sound.swoosh();
   shake.trigger(5, 140);
@@ -385,13 +412,21 @@ function resolveArrow(x, y) {
     if (b.popped || b.y <= 0) continue;
     if (Math.hypot(x - b.x, y - b.y) <= b.r * 1.2) { hit = b; break; }
   }
-  if (!hit) return;                 // 빗나가면 그냥 다시 쏜다
+  // 빗나가면 벌점 없이 다시 쏜다 — 계산은 맞았는데 활 솜씨 때문에 점수를 잃으면
+  // 아이는 수학이 아니라 조작을 원망하게 된다.
+  if (!hit) {
+    party.judge(x, y, "빗나갔어요! 다시!", CUTE.blue);
+    if (!isMuted()) sound.fizzle();
+    return;
+  }
   hit.popped = true;
   resolving = true;
   judgedOk = hit.ok;
   if (hit.ok) {
     count++;
-    party.correct(hit.x, hit.y, { base: 12 * (isSpurt() ? 2 : 1), elapsedMs: performance.now() - roundAt });
+    const perfect = shots <= 1;
+    party.correct(hit.x, hit.y, { base: (perfect ? 16 : 12) * (isSpurt() ? 2 : 1), elapsedMs: performance.now() - roundAt });
+    if (perfect) party.judge(hit.x, hit.y - hit.r * 1.4, "✨ 첫 발 명중!", PARTY.gold);
     if (party.combo > 0 && party.combo === party.maxCombo) comboShot.capture(canvas);
     autoDiff.reportCorrect();
     missStreak = 0;
@@ -413,10 +448,13 @@ function resolveArrow(x, y) {
   setTimeout(() => { if (state === "playing") newRound(); }, NEXT_MS);
 }
 
-function missAll() {
+// 표적은 화면을 돌아 계속 흘러가므로 "놓쳐서 사라지는" 일은 없다.
+// 대신 문제마다 제한 시간을 두어 리듬을 만든다.
+function timeUp() {
   resolving = true;
-  party.wrong(dims.w * 0.5, dims.h * 0.6, "놓쳤어요!");
+  party.wrong(dims.w * 0.5, dims.h * 0.5, "시간 초과!");
   autoDiff.reportWrong();
+  missStreak++;
   if (!isMuted()) sound.wrong();
   setTimeout(() => { if (state === "playing") newRound(); }, NEXT_MS);
 }
@@ -445,10 +483,10 @@ function endGame() {
   }
   document.getElementById("savePhotoBtn").onclick = async () => {
     const blob = await shot.toBlob((c, w, h) => drawPhotoOverlay(c, w, h, { title: TITLE, record: count + RECORD_SUFFIX, medal }));
-    downloadBlob(blob, `수학체육올림픽6_원과녁샤프슈터_${formatFileTimestamp()}.png`);
+    downloadBlob(blob, `수학체육올림픽6_원넓이양궁_${formatFileTimestamp()}.png`);
   };
   document.getElementById("saveVideoBtn").onclick = () => {
-    if (recordedBlob) downloadBlob(recordedBlob, `수학체육올림픽6_원과녁샤프슈터_${formatFileTimestamp()}.${recorder.extension}`);
+    if (recordedBlob) downloadBlob(recordedBlob, `수학체육올림픽6_원넓이양궁_${formatFileTimestamp()}.${recorder.extension}`);
   };
   document.getElementById("resultPanel").style.display = "flex";
   if (!isMuted()) sound.success();
@@ -503,76 +541,38 @@ function readAim() {
   if (tapReleased()) fire();   // 눌렀다 떼면 발사
 }
 
-// ── 과녁 ──
-function drawTarget(ctx) {
-  const c = targetCenter(), R = targetRadius();
-  const cols = ["#f8f9fa", "#343a40", "#4dabf7", PARTY.gold];
-  ctx.save();
-  // i = 0 이 가장 바깥 링이다. 바깥일수록 반지름이 커야 하므로 RINGS를 뒤에서부터 읽는다.
-  // (예전에는 바깥이 5, 가운데가 20으로 뒤집혀 있었다)
-  const ringAt = (i) => RINGS[RINGS.length - 1 - i];
-  for (let i = 0; i < RINGS.length; i++) {
-    const rr = R * (1 - i / RINGS.length);
-    ctx.beginPath();
-    ctx.arc(c.x, c.y, rr, 0, Math.PI * 2);
-    ctx.fillStyle = cols[i];
-    // 문제로 나온 반지름의 링을 또렷하게, 나머지는 흐리게 — "이 원의 넓이"가 눈에 보인다
-    ctx.globalAlpha = round && ringAt(i) === round.hitR ? 1 : 0.4;
-    ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = CUTE.ink;
-    ctx.lineWidth = Math.max(2, R * 0.018);
-    ctx.stroke();
-  }
-  ctx.restore();
-  // 각 링의 반지름 표시 — 문제에 나올 수가 눈에 보여야 한다.
-  // 위쪽에 적으면 가장 바깥 링의 숫자가 문제 배너에 가려지므로 아래쪽 절반에 적는다.
-  const fs = fluidPx(dims, 15, { min: 11, max: 20 });
-  for (let i = 0; i < RINGS.length; i++) {
-    const rr = R * (1 - i / RINGS.length) - R / RINGS.length / 2;
-    const val = RINGS[RINGS.length - 1 - i];
-    drawChunkyText(ctx, String(val), c.x, c.y + rr, fs, val === (round && round.hitR) ? PARTY.gold : "#fff",
-      { outline: CUTE.ink, outlineWidth: Math.max(2.5, fs * 0.24) });
-  }
-}
-
-// ── 정답 풍선 — 좌우로 흘러간다 (모두 같은 색·같은 크기) ──
-function drawBalloons(ctx, now) {
-  const { w, h } = dims;
-  const r = fluidPx(dims, 44, { min: 30, max: 62 });
-  const fs0 = r * 0.52;
-  let alive = 0, appeared = 0;
+// ── 표적 원 — 한 줄 위를 흘러가며 화면 끝에서 반대편으로 돌아온다 ──
+// 원의 크기가 곧 그 원의 넓이다(√넓이에 비례). 점수 링 같은 장식은 없다.
+function drawTargets(ctx, now, dt) {
+  const { w } = dims;
   for (const b of balloons) {
-    b.r = r;
-    const t = (now - b.at) / b.dur;
-    if (t < 0) continue;
-    appeared++;
-    if (b.popped || t >= 1) continue;
-    alive++;
-    // 한쪽 끝에서 반대쪽 끝으로 천천히 흘러간다 — 멈춰 있으면 표적 도전이 아니다
-    b.x = b.dir > 0 ? -r + (w + r * 2) * t : w + r - (w + r * 2) * t;
-    b.y = b.baseY + Math.sin(now / 620 + b.phase) * r * 0.30;
+    b.r = targetRadius(b.v);
+    if (!b.popped) {
+      b.x += b.vx * dt;
+      if (b.x < -b.r * 1.2) b.x = w + b.r * 1.2;
+      if (b.x > w + b.r * 1.2) b.x = -b.r * 1.2;
+    }
+    b.y = b.baseY + Math.sin(now / 700 + b.phase) * b.r * 0.16;
+    if (b.popped) continue;
 
+    if (b.ok) drawHelpRing(ctx, b.x, b.y, b.r);
+    // 원 안에 반지름 선을 그어 "이게 원이다"를 분명히 한다
+    drawSticker(ctx, b.x, b.y, b.r, CUTE.purple, { lineWidth: Math.max(3, b.r * 0.09) });
     ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(b.x, b.y + r * 1.05);
-    ctx.lineTo(b.x - r * 0.13, b.y + r * 0.86);
-    ctx.lineTo(b.x + r * 0.13, b.y + r * 0.86);
-    ctx.closePath();
-    ctx.fillStyle = CUTE.purple; ctx.fill();
-    ctx.strokeStyle = CUTE.ink; ctx.lineWidth = Math.max(2.5, r * 0.09); ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,0.55)";
+    ctx.lineWidth = Math.max(2, b.r * 0.05);
+    ctx.setLineDash([b.r * 0.16, b.r * 0.14]);
+    ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.x + b.r, b.y); ctx.stroke();
     ctx.restore();
-    if (b.ok) drawHelpRing(ctx, b.x, b.y, r);
-    drawSticker(ctx, b.x, b.y, r, CUTE.purple, { lineWidth: Math.max(3, r * 0.11) });
+
     const label = fmt(b.v);
-    let fs = fs0;
+    let fs = b.r * 0.52;
     ctx.save(); ctx.font = `900 ${fs}px sans-serif`;
     const tw = ctx.measureText(label).width; ctx.restore();
-    if (tw > r * 1.5) fs *= (r * 1.5) / tw;
+    if (tw > b.r * 1.5) fs *= (b.r * 1.5) / tw;
     drawChunkyText(ctx, label, b.x, b.y, fs, "#fff",
       { outline: CUTE.ink, outlineWidth: Math.max(3, fs * 0.24) });
   }
-  if (!resolving && appeared === balloons.length && alive === 0) missAll();
 }
 
 // ── 조준선 · 시위 게이지 ──
@@ -678,9 +678,23 @@ function stepGame() {
     if (t >= 1) resolveArrow(arrow.tx, arrow.ty);
   }
 
-  drawTarget(ctx);
-  drawBalloons(ctx, now);
+  drawTargets(ctx, now, dt);
   if (!resolving) drawAim(ctx);
+
+  // 이 문제에 남은 시간 띠
+  if (!resolving) {
+    const t = Math.max(0, 1 - (now - roundAt) / round.ms);
+    const bw = w * 0.5, bh = fluidPx(dims, 9, { min: 6, max: 13 });
+    const bx = w * 0.5, by = h * 0.80;
+    drawStickerRect(ctx, bx, by, bw, bh, bh / 2, "rgba(255,255,255,0.8)", { lineWidth: 2, drop: 0 });
+    ctx.save();
+    ctx.fillStyle = t < 0.3 ? CUTE.red : PARTY.gold;
+    ctx.beginPath();
+    ctx.roundRect(bx - bw / 2, by - bh / 2, Math.max(bh, bw * t), bh, bh / 2);
+    ctx.fill();
+    ctx.restore();
+    if (t <= 0) timeUp();
+  }
 
   if (arrow) {
     // 날아가는 화살 — 조준점에서 짧게 뻗는 선으로 표현
@@ -703,9 +717,10 @@ function stepGame() {
   const hudBottom = party.drawHud(ctx, dims, { remainMs: remain, count, suffix: "발" });
 
   const lines = [
-    { text: round.quiz.q.replace("<", "「").replace(">", "」"), size: 19, chunky: true, color: PARTY.gold },
-    // 공식에 숫자를 대입하는 단계가 가장 큰 벽이라, 대입까지 끝난 식을 크게 보여준다
-    { text: round.quiz.sub, size: 27, chunky: true, color: CUTE.ink },
+    { text: round.quiz.q.replace("<", "「").replace(">", "」"), size: 17, chunky: true, color: PARTY.gold },
+    // 공식에 숫자를 대입하는 단계가 가장 큰 벽이라, 대입까지 끝난 식을 크게 보여준다.
+    // 다만 두 줄이 서로 겹치지 않을 만큼만 키운다(19+27 은 겹쳤다).
+    { text: round.quiz.sub, size: 24, chunky: true, color: CUTE.ink },
   ];
   drawCuteBanner(ctx, dims, lines, fluidPx, { top: hudBottom });
 
@@ -718,7 +733,7 @@ function stepGame() {
     ctx.restore();
   }
   drawChunkyText(ctx,
-    mode === "motion" ? "흘러가는 정답 풍선을 쏴요! 앞손 겨냥 · 뒷손 당겼다 놓기" : "흘러가는 정답 풍선을 쏴요! 눌렀다 떼면 발사",
+    mode === "motion" ? "정답 넓이의 원을 쏴요! 앞손 겨냥 · 뒷손 당겼다 놓기" : "정답 넓이의 원을 쏴요! 눌렀다 떼면 발사",
     w * 0.5, h * 0.96, fluidPx(dims, 15, { min: 11, max: 20 }), "#fff",
     { outline: CUTE.ink, outlineWidth: fluidPx(dims, 5, { min: 3.5, max: 7 }) });
 

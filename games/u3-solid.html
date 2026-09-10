@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>쌓기나무 관제탑 · 종목 3</title>
+<title>쌓기나무 표적 던지기 · 종목 3</title>
 <link rel="stylesheet" href="../css/style.css?v=6">
 </head>
 <body>
@@ -18,7 +18,7 @@
   </div>
 
   <div class="overlay-panel" id="loadingPanel">
-    <h2>🧊 쌓기나무 관제탑</h2>
+    <h2>🧊 쌓기나무 표적 던지기</h2>
     <p id="loadingText">준비 중…</p>
   </div>
 
@@ -27,8 +27,8 @@
       <div class="rule-head">
         <div class="rule-char">🐨</div>
         <div>
-          <div class="rule-name">돌리</div>
-          <h2 class="rule-title">쌓기나무 관제탑</h2>
+          <div class="rule-name">던지</div>
+          <h2 class="rule-title">쌓기나무 표적 던지기</h2>
         </div>
       </div>
       <p class="rule-cheer"></p>
@@ -55,7 +55,7 @@
   <div class="overlay-panel" id="resultPanel" style="display:none">
     <div id="podium"></div>
     <div class="result-stats">
-      <div class="stat-box"><div class="num" id="statCount">0개</div><div class="label">맞힌 관제</div></div>
+      <div class="stat-box"><div class="num" id="statCount">0개</div><div class="label">맞힌 표적</div></div>
       <div class="stat-box"><div class="num" id="statBest">0개</div><div class="label">최고 기록</div></div>
       <div class="stat-box"><div class="num" id="statCombo">0</div><div class="label">최고 콤보</div></div>
     </div>
@@ -93,8 +93,8 @@ import {
 requestWakeLock();
 
 const UNIT = "n3";
-const TITLE = "쌓기나무 관제탑";
-const RECORD_SUFFIX = "개 관제";
+const TITLE = "쌓기나무 표적 던지기";
+const RECORD_SUFFIX = "개 명중";
 const MEDALS = { bronze: 4, silver: 7, gold: 10 };
 const CHAR = CHARACTERS[UNIT];
 const mode = InputMode.get();
@@ -147,6 +147,24 @@ function makeSolid(maxH = MAXH, minTotal = 6, maxTotal = 15) {
 
 function same(a, b) { return a.every((row, i) => row.every((v, j) => v === b[i][j])); }
 
+// ⭐1 전용 — 모두 1층인 평면 배치.
+// 시점을 돌릴 수 없게 됐으므로, 입체 그림 한 장만 보고도 답을 알 수 있어야 한다.
+// 층이 2층 이상 섞이면 앞줄이 뒷줄을 완전히 가려 <그림만으로는 답이 정해지지 않는>
+// 경우가 생긴다(3x3 사입체 투영에서 실제로 발생한다). 1층뿐이면 모든 칸이 보인다.
+function makeFlat(minCells = 4, maxCells = 6) {
+  for (let t = 0; t < 300; t++) {
+    const g = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    let placed = 0;
+    const n = randInt(minCells, maxCells);
+    while (placed < n) { const r = randInt(0, 2), c = randInt(0, 2); if (!g[r][c]) { g[r][c] = 1; placed++; } }
+    const rowsUsed = g.filter((row) => row.some((v) => v)).length;
+    const colsUsed = [0, 1, 2].filter((c) => g.some((row) => row[c])).length;
+    if (rowsUsed < 2 || colsUsed < 2) continue;   // 한 줄짜리는 문제가 되지 않는다
+    return g;
+  }
+  return [[1, 1, 0], [0, 1, 0], [0, 1, 1]];
+}
+
 // 앞에서 보면 각 열(column)의 가장 높은 층수만큼 보인다.
 // 결과는 [층][열] 순서의 3x3 참/거짓 표 — 맨 윗줄이 3층이다.
 function frontView(g) {
@@ -170,9 +188,6 @@ function sideView(g) { return frontView(rotate90(g)); }
 
 // 위에서 보면 층이 하나라도 있는 자리가 보인다
 function topView(g) { return g.map((row) => row.map((v) => (v > 0 ? 1 : 0))); }
-
-// 위에서 본 자리에 층수를 적은 표 (⭐3에서 쓴다)
-function topNumbers(g) { return g.map((row) => row.slice()); }
 
 function cubeCount(g) { return g.flat().reduce((a, b) => a + b, 0); }
 
@@ -207,29 +222,29 @@ function distinctOptions(ans, pool, more) {
 }
 
 // ---------------------------------------------------------------------------
-// 시점 — 앞 → 옆 → 위 순환. 손을 크게 휘두를 때마다 한 칸씩 돈다.
+// 문제 — 시점 회전은 없앴다.
+//
+// 예전에는 손을 휘둘러 「앞 → 옆 → 위」로 돌려 볼 수 있었는데, 「위에서 본 모양은?」을
+// 물어 놓고 위에서 본 모습으로 돌릴 수 있게 해 둔 셈이라 <돌리면 정답이 그대로 보였다>.
+// 그래서 회전을 통째로 들어내고, 대신 <주어진 그림 한 장을 보고 머릿속으로 바꿔 보는>
+// 원래의 학습으로 되돌렸다. 몸은 "정답 표적에 공을 던져 맞히는" 쪽에서 쓴다.
 // ---------------------------------------------------------------------------
-const VIEWS = [
-  { key: "front", label: "앞에서 본 모습" },
-  { key: "side", label: "옆에서 본 모습" },
-  { key: "top", label: "위에서 본 모습" },
-];
 
 function genRound(level) {
   if (level === 1) {
-    // ⭐1 — 위에서 본 모양만. 층수와 상관없이 "블록이 놓인 자리"만 보면 되므로
-    // 세 방향 중 가장 직관적이다. 입체도 2층까지, 개수도 적게 만든다.
-    const g = makeSolid(2, 4, 7);
+    // ⭐1 — 1층짜리 평면 배치를 입체 그림으로 보여 주고 「위에서 본 모양」을 묻는다.
+    const g = makeFlat(4, 6);
     const ans = topView(g);
     return {
-      g, kind: "shape", askKey: "top",
+      g, given: "solid", kind: "shape",
       ask: "「위에서 본 모양」은 어느 것일까요?",
-      hint: "손을 휘둘러 「위에서 본 모습」으로 바꾸면 바로 보여요",
-      options: distinctOptions(ans, [frontView(g), sideView(g)], () => perturb(ans)),
+      hint: "블록이 놓인 <자리>만 보면 돼요",
+      options: distinctOptions(ans, [], () => perturb(ans)),
     };
   }
   if (level === 2) {
-    // ⭐2 — 쌓기나무 개수. 위에서 본 모습에 층수가 적혀 나오므로 더하기만 하면 된다.
+    // ⭐2 — 위에서 본 모양에 층수를 적은 표를 주고 개수를 묻는다(교과서와 같은 형태).
+    // 입체 그림으로 주면 뒤에 숨은 나무가 보이지 않아 <그림만으로는 셀 수 없다>.
     const g = makeSolid(3, 6, 11);
     const n = cubeCount(g);
     const wrongs = new Set();
@@ -238,31 +253,22 @@ function genRound(level) {
       if (n + d > 0) wrongs.add(n + d);
     }
     return {
-      g, kind: "count", askKey: "top",
+      g, given: "table", kind: "count",
       ask: "쌓기나무는 모두 몇 개일까요?",
-      hint: "「위에서 본 모습」으로 바꾸면 칸마다 층수가 적혀 있어요",
+      hint: "칸에 적힌 층수를 모두 더해요",
       options: distinctOptions(n, [...wrongs], () => n + randInt(1, 4) * (Math.random() < 0.5 ? -1 : 1)),
     };
   }
-  // ⭐3 — 앞·옆에서 본 모양, 또는 층수 표
+  // ⭐3 — 층수 표를 주고 앞/옆에서 본 모양을 묻는다
   const g = makeSolid(3, 6, 13);
-  if (Math.random() < 0.6) {
-    const front = Math.random() < 0.5;
-    const ans = front ? frontView(g) : sideView(g);
-    const other = front ? sideView(g) : frontView(g);
-    return {
-      g, kind: "shape", askKey: front ? "front" : "side",
-      ask: `「${front ? "앞" : "옆"}에서 본 모양」은 어느 것일까요?`,
-      hint: "손을 휘둘러 그 방향으로 돌려 놓고 비교해 보세요",
-      options: distinctOptions(ans, [other, topView(g)], () => perturb(ans)),
-    };
-  }
-  const ans = topNumbers(g);
+  const front = Math.random() < 0.5;
+  const ans = front ? frontView(g) : sideView(g);
+  const other = front ? sideView(g) : frontView(g);
   return {
-    g, kind: "numbers", askKey: "top",
-    ask: "「위에서 본 모양에 층수를 적은 표」는?",
-    hint: "각 자리에 나무가 몇 개 쌓였는지 세어 보세요",
-    options: distinctOptions(ans, [], () => perturb(ans)),
+    g, given: "table", kind: "shape",
+    ask: `「${front ? "앞" : "옆"}에서 본 모양」은 어느 것일까요?`,
+    hint: front ? "세로줄마다 가장 높은 층수만큼 보여요" : "가로줄마다 가장 높은 층수만큼 보여요",
+    options: distinctOptions(ans, [other, topView(g)], () => perturb(ans)),
   };
 }
 
@@ -289,14 +295,14 @@ async function init() {
 
   await showRuleCard({
     unit: UNIT,
-    title: "쌓기나무 관제탑",
+    title: "쌓기나무 표적 던지기",
     lines: [
-      "쌓기나무를 <b>여러 방향에서</b> 살펴보는 게임이에요!",
+      "위에 <b>카드 3장</b>이 지나가요. 맞는 카드에 <b>공을 던져 맞히세요!</b>",
       mode === "motion"
-        ? "<b>한 손을 좌우로 크게 휘두르면</b> 돌아가요. <b>앞 → 옆 → 위</b> 순서!"
-        : "<b>🔄 돌리기 버튼</b>을 누르면 돌아가요. <b>앞 → 옆 → 위</b> 순서!",
-      "돌려 보고 나서, 아래 <b>카드 3장</b> 중 맞는 것을 고르세요.",
-      "고를 카드 위에 <b>손을 잠깐 올려두면</b> 선택돼요.",
+        ? "<b>손을 좌우로 움직여</b> 조준하고, <b>위로 확 뿌리면</b> 던져요."
+        : "<b>맞히고 싶은 곳을 누르면</b> 그쪽으로 던져요.",
+      "카드가 움직이니까 <b>조금 앞을 겨눠야</b> 맞아요!",
+      "빗나가도 괜찮아요 — <b>시간 안에 몇 번이든</b> 다시 던질 수 있어요.",
     ],
   });
 
@@ -313,9 +319,11 @@ const startGate = new StartGate(mode, holdFill);
 
 let autoDiff, count, playEndAt;
 let round = null, roundAt, resolving;
-let cards = [], hoverIdx = -1, judgedIdx = -1, judgedOk = false;
-let viewIdx = 0, spinFrom = 0, spinAt = 0;
-let lastSpinAt = 0;
+let cards = [], judgedIdx = -1, judgedOk = false;
+let ball = null;            // 날아가는 공 {x,y,vx,vy,g}
+let aimX = 0;               // 지금 겨누고 있는 착지점
+let lastThrowAt = 0;
+let throws = 0;             // 이 문제에서 던진 횟수 (한 번에 맞히면 퍼펙트)
 let confetti = [], sparks = [];
 const shake = new ScreenShake();
 let recorder, comboShot, fallbackShot, autoRec, recordedBlob = null;
@@ -323,8 +331,6 @@ const recIndicator = document.getElementById("recIndicator");
 let cursors = [];
 let lastFrameAt = 0;
 
-// 카드는 손이 닿으면 즉시 선택된다. 예전에는 0.9초 올려두고 기다렸는데,
-// 그 대기 시간 동안 몸이 완전히 멈춰 버려서 체육 활동이 아니게 됐다.
 // ── 도움 표시 ── 두 번 연속 틀리면 다음 문제의 정답을 반짝여 알려 준다.
 // 계속 틀리기만 하면 아이는 포기한다. "한 번은 맞혀 보는 경험"이 있어야 다음을 시도한다.
 let missStreak = 0;
@@ -342,38 +348,60 @@ function drawHelpRing(ctx, x, y, r) {
   ctx.restore();
 }
 
-const ROUND_MS = 11000;      // 이 안에 못 고르면 놓침 — 시간 압박이 있어야 리듬이 산다
+const ROUND_MS = 14000;      // 이 안에 못 맞히면 다음 문제 — 여러 번 던져 볼 시간을 준다
 const NEXT_MS = 600;
-// 어깨 너비/초 — 이보다 빠르게 손이 지나가면 "휘둘렀다".
-// 너무 높게 잡으면 힘껏 휘둘러도 안 돌아가서 아이가 포기한다.
-const SPIN_SPEED = 1.15;
-const SPIN_COOLDOWN = 450;
 
-function rotateBtn() {
-  const { w, h } = dims;
-  const r = fluidPx(dims, 40, { min: 30, max: 56 });
-  return { x: w * 0.12, y: h * 0.44, r };
+// 던지기 — 손을 <위로 확 뿌리는> 동작에서만 발동한다.
+// 좌우로 움직이는 건 조준이므로, 가로 움직임을 던지기로 읽으면 겨누다가 제멋대로 날아간다.
+const THROW_SPEED = 1.25;    // 어깨 너비/초
+const THROW_COOL = 620;
+// 세로 배치 — 위에서부터 HUD · 문제 배너 · 시간 띠 · 카드 띠 · 입체 · 발사대.
+// 처음엔 카드를 0.24 에 뒀다가 문제 배너와 겹쳤다. 배너는 HUD 아래 0.25h 까지 내려온다.
+const BAND_Y = 0.41;         // 카드가 지나가는 높이
+const BAR_Y = 0.55;          // 남은 시간 띠 (카드 띠와 입체 사이의 빈 곳)
+const SOLID_BASE = 0.80;     // 입체가 서 있는 바닥
+const LAUNCH_Y = 0.90;       // 공이 출발하는 높이
+
+function launcher() { return { x: dims.w * 0.5, y: dims.h * LAUNCH_Y }; }
+
+// 공이 카드 띠에 닿기까지 걸리는 시간(초). 세게 뿌릴수록 빨리 도착해 덜 겨눠도 된다.
+function flightT(swingSpeed) {
+  const t = 0.86 - Math.max(0, swingSpeed - THROW_SPEED) * 0.14;
+  return Math.max(0.42, Math.min(0.86, t));
+}
+
+// 출발점에서 목표점까지 T초에 도착하는 포물선. 중력을 T에 맞춰 정하지 않으면
+// T가 커질수록 최고점이 화면 밖으로 솟는다(6학년판에서 한 번 겪은 함정).
+function launch(x, y, tx, ty, T) {
+  const g = (dims.h * 2.6) / (T * T);
+  return { x, y, vx: (tx - x) / T, vy: (ty - y - 0.5 * g * T * T) / T, g };
 }
 
 function layoutCards() {
   const { w, h } = dims;
   const n = round.options.length;
-  const cw = Math.min(w * 0.27, h * 0.24);
+  const cw = Math.min(w * 0.22, h * 0.19);
   const gap = (w - cw * n) / (n + 1);
+  // ⭐이 오를수록 카드가 빨리 흘러간다 — 그만큼 앞을 더 겨눠야 한다.
+  // 셋이 <같은 방향으로> 흘러가야 한다. 서로 반대로 보내면 금세 겹쳐서
+  // 두 장이 한자리에 포개지고, 어느 카드를 맞혔는지 알 수 없게 된다.
+  const dir = Math.random() < 0.5 ? 1 : -1;
+  const sp = w * (autoDiff.level === 1 ? 0.045 : autoDiff.level === 2 ? 0.085 : 0.125) * dir;
   cards = round.options.map((o, i) => ({
     ...o,
     x: gap * (i + 1) + cw * (i + 0.5),
-    y: h * 0.81,
+    y: h * BAND_Y,
     w: cw, h: cw * 0.92,
+    vx: sp,
   }));
 }
 
 function newRound() {
   round = genRound(autoDiff.level);
   layoutCards();
-  hoverIdx = -1;
   judgedIdx = -1; judgedOk = false;
-  viewIdx = 0; spinFrom = 0; spinAt = 0;
+  ball = null; throws = 0;
+  aimX = dims.w * 0.5;
   resolving = false;
   motion.reset();
   roundAt = performance.now();
@@ -426,13 +454,13 @@ function beginPlay() {
   });
 }
 
-function spin(dir) {
+function throwBall(swingSpeed) {
   const now = performance.now();
-  if (now - lastSpinAt < SPIN_COOLDOWN) return;
-  lastSpinAt = now;
-  spinFrom = viewIdx;
-  viewIdx = (viewIdx + (dir > 0 ? 1 : VIEWS.length - 1)) % VIEWS.length;
-  spinAt = now;
+  if (now - lastThrowAt < THROW_COOL || ball || resolving) return;
+  lastThrowAt = now;
+  throws++;
+  const L = launcher();
+  ball = { ...launch(L.x, L.y, aimX, dims.h * BAND_Y, flightT(swingSpeed)), trail: [] };
   if (!isMuted()) sound.swoosh();
 }
 
@@ -444,7 +472,10 @@ function choose(i) {
   if (c.ok) {
     count++;
     const spurt = playEndAt - performance.now() < 10000;
-    party.correct(c.x, c.y, { base: 11 * (spurt ? 2 : 1), elapsedMs: performance.now() - roundAt });
+    // 한 번에 맞히면 퍼펙트 — 여러 번 던져 맞혀도 정답은 정답이다
+    const perfect = throws <= 1;
+    party.correct(c.x, c.y, { base: (perfect ? 15 : 11) * (spurt ? 2 : 1), elapsedMs: performance.now() - roundAt });
+    if (perfect) party.judge(c.x, c.y - c.h * 0.8, "✨ 원샷 명중!", PARTY.gold);
     if (party.combo > 0 && party.combo === party.maxCombo) comboShot.capture(canvas);
     autoDiff.reportCorrect();
     missStreak = 0;
@@ -457,7 +488,7 @@ function choose(i) {
       if (!isMuted()) sound.fever();
     }
   } else {
-    party.wrong(c.x, c.y, "돌려서 다시 봐요!");
+    party.wrong(c.x, c.y, "다시 살펴봐요!");
     autoDiff.reportWrong();
     missStreak++;
     shake.trigger(6, 170);
@@ -490,10 +521,10 @@ function endGame() {
   }
   document.getElementById("savePhotoBtn").onclick = async () => {
     const blob = await shot.toBlob((c, w, h) => drawPhotoOverlay(c, w, h, { title: TITLE, record: count + RECORD_SUFFIX, medal }));
-    downloadBlob(blob, `수학체육올림픽6_쌓기나무관제탑_${formatFileTimestamp()}.png`);
+    downloadBlob(blob, `수학체육올림픽6_쌓기나무던지기_${formatFileTimestamp()}.png`);
   };
   document.getElementById("saveVideoBtn").onclick = () => {
-    if (recordedBlob) downloadBlob(recordedBlob, `수학체육올림픽6_쌓기나무관제탑_${formatFileTimestamp()}.${recorder.extension}`);
+    if (recordedBlob) downloadBlob(recordedBlob, `수학체육올림픽6_쌓기나무던지기_${formatFileTimestamp()}.${recorder.extension}`);
   };
   document.getElementById("resultPanel").style.display = "flex";
   if (!isMuted()) sound.success();
@@ -626,7 +657,6 @@ function drawCards(ctx) {
   for (let i = 0; i < cards.length; i++) {
     const c = cards[i];
     const judged = i === judgedIdx;
-    const hot = i === hoverIdx && !resolving;
     const fill = judged ? (judgedOk ? CUTE.green : CUTE.red) : CUTE.cream;
     drawStickerRect(ctx, c.x, c.y, c.w, c.h, c.w * 0.14, fill,
       { lineWidth: Math.max(3, c.w * 0.045), drop: c.w * 0.05 });
@@ -634,7 +664,7 @@ function drawCards(ctx) {
       drawChunkyText(ctx, `${c.v}개`, c.x, c.y, c.h * 0.42, judged ? "#fff" : CUTE.ink,
         { outline: judged ? CUTE.ink : "#fff", outlineWidth: Math.max(3, c.h * 0.09) });
     } else {
-      drawGrid(ctx, c.v, c.x, c.y, Math.min(c.w, c.h) * 0.27, round.kind === "numbers");
+      drawGrid(ctx, c.v, c.x, c.y, Math.min(c.w, c.h) * 0.27, false);
     }
     // 두 번 연속 틀렸으면 정답 카드를 반짝여 알려 준다
     if (helpOn() && c.ok && !resolving) {
@@ -645,14 +675,6 @@ function drawCards(ctx) {
       ctx.lineWidth = Math.max(5, c.w * 0.07);
       const g = 6 + t * 10;
       ctx.strokeRect(c.x - c.w / 2 - g, c.y - c.h / 2 - g, c.w + g * 2, c.h + g * 2);
-      ctx.restore();
-    }
-    // 손이 올라온 카드는 금색 테두리로 알려 준다 (닿는 순간 선택된다)
-    if (hot) {
-      ctx.save();
-      ctx.strokeStyle = PARTY.gold;
-      ctx.lineWidth = Math.max(4, c.w * 0.055);
-      ctx.strokeRect(c.x - c.w / 2 - 4, c.y - c.h / 2 - 4, c.w + 8, c.h + 8);
       ctx.restore();
     }
   }
@@ -704,16 +726,6 @@ function loop(tsMs) {
   ctx.restore();
 }
 
-// 지금 커서 위치 (모션은 더 높이 든 손)
-function cursorPoint() {
-  if (mode === "motion") {
-    const f = motion.last;
-    if (!f) return null;
-    return f.lw.y < f.rw.y ? f.lw : f.rw;
-  }
-  return cursors[0] || null;
-}
-
 function stepGame() {
   const { ctx, w, h } = dims;
   const dt = lastFrameAt ? Math.min(0.06, (performance.now() - lastFrameAt) / 1000) : 1 / 60;
@@ -721,37 +733,75 @@ function stepGame() {
   const remain = Math.max(0, playEndAt - performance.now());
   if (remain <= 0) { endGame(); return; }
   const now = performance.now();
+  const bandY = h * BAND_Y;
+  const L = launcher();
 
-  // ── 돌리기 ──
+  // ── 카드는 좌우로 흘러간다 (움직이는 표적) ──
+  // 화면 끝으로 나가면 반대편에서 다시 들어온다 (간격이 그대로 유지된다)
+  for (const c of cards) {
+    c.x += c.vx * dt;
+    if (c.x < -c.w * 0.7) c.x = w + c.w * 0.7;
+    if (c.x > w + c.w * 0.7) c.x = -c.w * 0.7;
+  }
+
+  // ── 조준 ──
+  // 모션: 손을 좌우로 움직인 <위치>가 곧 착지점이다. 팔 각도로 조준하게 하면
+  //       6학년이 각도를 미세 조정하다 시간을 다 쓴다. 위치는 눈으로 바로 확인된다.
   if (!resolving) {
     if (mode === "motion") {
+      const f = motion.last;
+      if (f) {
+        const hand = f.lw.y < f.rw.y ? f.lw : f.rw;      // 더 높이 든 손이 던지는 손
+        aimX += (hand.x - aimX) * Math.min(1, dt * 12);   // 손떨림을 걸러 준다
+      }
+    } else if (cursors[0]) {
+      aimX = cursors[0].x;
+    }
+    aimX = Math.max(w * 0.04, Math.min(w * 0.96, aimX));
+  }
+
+  // ── 던지기 ──
+  if (!resolving && !ball) {
+    if (mode === "motion") {
       const sw = motion.swing();
-      // 가로로 크게 지나갈 때만 — 카드를 고르려 손을 옮기는 움직임과 구분한다
-      if (sw && sw.speed > SPIN_SPEED && Math.abs(sw.dx) > Math.abs(sw.dy) * 1.4) spin(sw.dx > 0 ? 1 : -1);
+      // 위로 뿌리는 동작만 던지기다. 가로 움직임은 조준이므로 반드시 구분해야 한다.
+      if (sw && sw.speed > THROW_SPEED && sw.dy < 0 && Math.abs(sw.dy) > Math.abs(sw.dx) * 0.7) {
+        throwBall(sw.speed);
+      }
     } else if (pointerInput && pointerInput.consumeJustDown()) {
-      // down 상태는 한 프레임 만에 사라져서 클릭을 놓친다 — "방금 눌렀는가"로 봐야 한다
-      const b = rotateBtn(), p = cursors[0];
-      if (p && Math.hypot(p.x - b.x, p.y - b.y) <= b.r) spin(1);
+      // 누른 지점을 겨눈 것으로 보고 바로 던진다 (한 프레임짜리 클릭도 놓치지 않는다)
+      if (cursors[0]) aimX = Math.max(w * 0.04, Math.min(w * 0.96, cursors[0].x));
+      throwBall(THROW_SPEED);
     }
   }
 
-  // ── 카드를 손으로 치기 ──
-  const p = !resolving ? cursorPoint() : null;
-  let over = -1;
-  if (p) {
-    for (let i = 0; i < cards.length; i++) {
-      const c = cards[i];
-      if (Math.abs(p.x - c.x) <= c.w / 2 && Math.abs(p.y - c.y) <= c.h / 2) { over = i; break; }
+  // ── 공 ──
+  if (ball) {
+    ball.trail.push({ x: ball.x, y: ball.y });
+    if (ball.trail.length > 12) ball.trail.shift();
+    ball.vy += ball.g * dt;
+    ball.x += ball.vx * dt;
+    ball.y += ball.vy * dt;
+    let hit = -1;
+    // 내려오는 중일 때만 맞는다. 공은 카드 띠 위로 한 번 솟았다가 떨어지므로,
+    // 올라가는 길에 스치는 것까지 세면 <아직 겨냥한 자리에 닿기도 전에> 판정돼 버린다.
+    if (ball.vy >= 0) {
+      for (let i = 0; i < cards.length; i++) {
+        const c = cards[i];
+        if (Math.abs(ball.x - c.x) <= c.w / 2 && Math.abs(ball.y - c.y) <= c.h / 2) { hit = i; break; }
+      }
+    }
+    if (hit >= 0) { ball = null; choose(hit); }
+    else if (ball.y < -h * 0.2 || ball.x < -w * 0.2 || ball.x > w * 1.2) {
+      // 빗나갔다 — 벌점 없이 다시 던지게 한다. 계산은 맞았는데 던지기가 서툴러
+      // 점수를 잃으면 아이는 수학이 아니라 조작을 원망하게 된다.
+      ball = null;
+      party.judge(w * 0.5, h * 0.62, "빗나갔어요! 다시!", CUTE.blue);
+      if (!isMuted()) sound.fizzle();
     }
   }
-  hoverIdx = over;
-  if (over >= 0) {
-    // 입체를 돌리려고 팔을 크게 휘두르는 중이면 카드를 고른 것으로 보지 않는다
-    const sw = mode === "motion" ? motion.swing() : null;
-    const swinging = sw && sw.speed > SPIN_SPEED * 0.7;
-    if (!swinging) choose(over);
-  }
-  // 시간 안에 못 고르면 놓침 — 다음 문제가 바로 온다
+
+  // 시간 안에 못 맞히면 놓침
   if (!resolving && now - roundAt > ROUND_MS) {
     resolving = true;
     party.wrong(w * 0.5, h * 0.5, "시간 초과!");
@@ -761,45 +811,45 @@ function stepGame() {
     setTimeout(() => { if (state === "playing") newRound(); }, NEXT_MS);
   }
 
-  // ── 입체 ──
-  const cx = w * 0.5, cy = h * 0.44;
-  const unit = Math.min(w * 0.062, h * 0.050);
-  // 시점이 바뀌는 0.35초 동안 살짝 회전하는 느낌을 준다
-  const spinT = Math.min(1, (now - spinAt) / 350);
-  const view = VIEWS[viewIdx].key;
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.scale(0.85 + 0.15 * spinT, 1);
-  ctx.translate(-cx, -cy);
-  // 층수 숫자는 "세기"를 도와주는 발판이다. 다만 그 숫자 자체가 답인 문제(층수 표)나
-  // 어느 칸이 찼는지가 답인 문제(위에서 본 모양)에서는 답을 알려주는 셈이라 감춘다.
-  const showLayerNumbers = round.kind === "count" || round.askKey !== "top";
-  if (view === "top") drawTopDown(ctx, round.g, cx, cy, unit * 1.35, showLayerNumbers);
-  else if (view === "side") drawSolid(ctx, rotate90(round.g), cx, cy + unit * 1.9, unit);
-  else drawSolid(ctx, round.g, cx, cy + unit * 1.9, unit);
-  ctx.restore();
+  // ── 문제 (입체 그림 또는 층수 표) ──
+  const cx = w * 0.5;
+  const unit = Math.min(w * 0.050, h * 0.040);
+  if (round.given === "solid") drawSolid(ctx, round.g, cx, h * SOLID_BASE, unit);
+  else drawTopDown(ctx, round.g, cx, h * (SOLID_BASE - 0.11), unit * 1.5, true);
 
-  // 지금 어느 방향에서 보고 있는지
-  const vfs = fluidPx(dims, 20, { min: 14, max: 28 });
-  drawStickerRect(ctx, cx, h * 0.635, vfs * 10, vfs * 1.9, vfs * 0.5, PARTY.gold,
-    { lineWidth: Math.max(3, vfs * 0.16), drop: vfs * 0.2 });
-  drawChunkyText(ctx, `👁 ${VIEWS[viewIdx].label}`, cx, h * 0.635, vfs, CUTE.ink,
+  const vfs = fluidPx(dims, 15, { min: 11, max: 20 });
+  const badge = round.given === "solid" ? "🧊 쌓기나무" : "🔢 위에서 본 모양에 층수를 쓴 것";
+  const by = h * (SOLID_BASE + 0.045);
+  drawStickerRect(ctx, cx, by, vfs * (round.given === "solid" ? 8 : 17), vfs * 1.8, vfs * 0.5,
+    PARTY.gold, { lineWidth: Math.max(3, vfs * 0.16), drop: vfs * 0.2 });
+  drawChunkyText(ctx, badge, cx, by, vfs, CUTE.ink,
     { outline: "#fff", outlineWidth: Math.max(2.5, vfs * 0.16) });
 
-  // 터치·마우스용 돌리기 버튼
-  if (mode !== "motion") {
-    const b = rotateBtn();
-    drawSticker(ctx, b.x, b.y, b.r, CUTE.cream, { lineWidth: Math.max(3, b.r * 0.14) });
-    drawChunkyText(ctx, "🔄", b.x, b.y, b.r * 0.9, CUTE.ink, { outline: "#fff", outlineWidth: 2 });
-    drawChunkyText(ctx, "돌리기", b.x, b.y + b.r * 1.35, b.r * 0.38, "#fff",
-      { outline: CUTE.ink, outlineWidth: Math.max(3, b.r * 0.11) });
+  // ── 조준선 · 던지는 사람 ──
+  if (!resolving) {
+    drawAim(ctx, L, aimX, bandY);
+    const pr = fluidPx(dims, 22, { min: 16, max: 30 });
+    drawSticker(ctx, L.x, L.y, pr, CUTE.cream, { lineWidth: Math.max(3, pr * 0.16) });
+    drawChunkyText(ctx, ball ? "💨" : "🤾", L.x, L.y, pr * 1.1, CUTE.ink, { outline: "#fff", outlineWidth: 2 });
+  }
+
+  // ── 공 ──
+  if (ball) {
+    for (let i = 0; i < ball.trail.length; i++) {
+      const t = ball.trail[i], a = (i + 1) / ball.trail.length;
+      ctx.save(); ctx.globalAlpha = a * 0.45; ctx.fillStyle = "#fff";
+      ctx.beginPath(); ctx.arc(t.x, t.y, fluidPx(dims, 7, { min: 5, max: 10 }) * a, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+    drawSticker(ctx, ball.x, ball.y, fluidPx(dims, 15, { min: 11, max: 21 }), CUTE.orange,
+      { lineWidth: fluidPx(dims, 3.5, { min: 2.5, max: 5 }) });
   }
 
   // 이 문제에 남은 시간 띠
   if (!resolving) {
     const t = Math.max(0, 1 - (now - roundAt) / ROUND_MS);
     const bw = w * 0.5, bh = fluidPx(dims, 9, { min: 6, max: 13 });
-    const bx = w * 0.5, by = h * 0.735;
+    const bx = w * 0.5, by = h * BAR_Y;
     drawStickerRect(ctx, bx, by, bw, bh, bh / 2, "rgba(255,255,255,0.8)", { lineWidth: 2, drop: 0 });
     ctx.save();
     ctx.fillStyle = t < 0.3 ? CUTE.red : PARTY.gold;
@@ -812,7 +862,7 @@ function stepGame() {
   drawCards(ctx);
 
   const br = fluidPx(dims, 22, { min: 16, max: 30 });
-  drawMascot(ctx, w * 0.95, h * 0.40, br, CHAR, party.currentMood(remain));
+  drawMascot(ctx, w * 0.95, h * 0.62, br, CHAR, party.currentMood(remain));
 
   const hudBottom = party.drawHud(ctx, dims, { remainMs: remain, count, suffix: "개" });
 
@@ -824,14 +874,14 @@ function stepGame() {
   if (remain < 10000) {
     const fs2 = fluidPx(dims, 22, { min: 16, max: 30 });
     const puls = 1 + Math.sin(now / 120) * 0.08;
-    ctx.save(); ctx.translate(w * 0.5, h * 0.70); ctx.scale(puls, puls);
+    ctx.save(); ctx.translate(w * 0.5, h * 0.55); ctx.scale(puls, puls);
     drawChunkyText(ctx, "🔥 라스트 스퍼트! 코인 2배", 0, 0, fs2, CUTE.red,
       { outline: "#fff", outlineWidth: Math.max(4, fs2 * 0.24) });
     ctx.restore();
   }
   drawChunkyText(ctx,
-    mode === "motion" ? "손을 휘둘러 돌려 보고 · 카드를 손으로 치면 선택!" : "🔄로 돌려 보고 · 카드를 누르면 선택!",
-    w * 0.5, h * 0.965, fluidPx(dims, 15, { min: 11, max: 20 }), "#fff",
+    mode === "motion" ? "손을 좌우로 움직여 겨누고 · 위로 확 뿌려서 던지기!" : "맞히고 싶은 곳을 누르면 던져요!",
+    w * 0.5, h * 0.985, fluidPx(dims, 15, { min: 11, max: 20 }), "#fff",
     { outline: CUTE.ink, outlineWidth: fluidPx(dims, 5, { min: 3.5, max: 7 }) });
 
   party.update(dt);
@@ -842,6 +892,36 @@ function stepGame() {
 
   drawVignette(ctx, w, h, 0.16);
   drawLevelStars(ctx, dims, autoDiff.level, fluidPx);
+}
+
+// 지금 던지면 어디로 가는지 점선으로 그려 준다.
+// 움직이는 표적을 맞히려면 "얼마나 앞을 겨눠야 하는지" 눈으로 보여야 한다.
+function drawAim(ctx, L, tx, ty) {
+  const T = flightT(THROW_SPEED);
+  const b = launch(L.x, L.y, tx, ty, T);
+  ctx.save();
+  ctx.globalAlpha = ball ? 0.25 : 0.9;
+  // 하늘색 배경에 흰 점을 찍으면 보이지 않는다 — 금색 점에 남색 테두리를 두른다
+  ctx.fillStyle = PARTY.gold;
+  ctx.strokeStyle = CUTE.ink;
+  for (let i = 1; i <= 14; i++) {
+    const t = (T * i) / 14;
+    const x = b.x + b.vx * t;
+    const y = b.y + b.vy * t + 0.5 * b.g * t * t;
+    const rr = fluidPx(dims, 5, { min: 3.5, max: 7 }) * (1 - i / 22);
+    ctx.lineWidth = Math.max(1.5, rr * 0.4);
+    ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
+  ctx.restore();
+  // 착지점 표시
+  const mr = fluidPx(dims, 16, { min: 12, max: 22 });
+  ctx.save();
+  ctx.globalAlpha = ball ? 0.3 : 1;
+  ctx.strokeStyle = PARTY.gold;
+  ctx.lineWidth = Math.max(3, mr * 0.24);
+  ctx.beginPath(); ctx.arc(tx, ty, mr, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(tx - mr * 1.5, ty); ctx.lineTo(tx + mr * 1.5, ty); ctx.stroke();
+  ctx.restore();
 }
 
 // 바닥 표를 90° 돌린다 — "옆에서 본 모습"은 돌려 세운 같은 입체다

@@ -128,47 +128,43 @@ function fkey(f) { return `${f.p}/${f.q}`; }
 // ---------------------------------------------------------------------------
 // 코트 — 피카츄 배구처럼 <옆에서 본 화면>이다.
 // 왼쪽이 상대 코트, 오른쪽이 내 코트, 가운데가 네트.
-// 상대 코트 바닥은 앞·중간·뒤 세 구역으로 나뉘고 각 구역에 분수가 적혀 있다.
+//
+// 예전에는 상대 코트 바닥을 세 구역으로 나누고 <자세로 구역을 고르게> 했다
+// (점프=뒤 / 그대로=가운데 / 낮추기=앞). 두 가지가 잘못됐다.
+//  ① 셔틀콕을 보면서 바닥에 적힌 분수 세 개를 동시에 읽어야 해서 눈이 갈라졌다.
+//  ② 위로 뛰었는데 셔틀콕이 뒤로 간다 — 몸의 방향과 화면의 방향이 어긋난다.
+// 그래서 <셔틀콕 하나하나에 분수를 붙여> 날려 보낸다. 정답이 적힌 셔틀콕만 받아치고,
+// 오답 셔틀콕은 아웃이니까 그냥 떨어뜨린다. 눈은 날아오는 셔틀콕 한 곳만 보면 된다.
 // ---------------------------------------------------------------------------
 const GROUND = 0.80;        // 바닥
 const NET_TOP = 0.50;       // 네트 꼭대기
-const HIT_Y = 0.62;         // 셔틀콕이 이 높이로 내려오면 라켓에 닿는다
+const HIT_Y = 0.66;         // 서서 칠 때의 타점
+const SMASH_Y = 0.44;       // 점프해서 칠 때의 타점 — 이 높이에서 때리면 스매시
 
 function groundY() { return dims.h * GROUND; }
 function netX() { return dims.w * 0.5; }
-// 상대 코트 세 구역 (네트에서 먼 쪽이 "뒤")
-function zoneRects() {
-  const { w } = dims;
-  const left = w * 0.04, right = w * 0.47;
-  const zw = (right - left) / 3;
-  return [
-    { key: "back", x0: left, x1: left + zw },                 // 뒤 — 점프해서 멀리
-    { key: "mid", x0: left + zw, x1: left + zw * 2 },          // 중간 — 그냥 치기
-    { key: "front", x0: left + zw * 2, x1: right },            // 앞 — 낮게 놓기
-  ];
-}
-const STANCE_ZONE = { high: 0, mid: 1, low: 2 };
-const STANCE_LABEL = { high: "🔼 점프 = 뒤로", mid: "➡️ 그대로 = 가운데", low: "🔽 낮추기 = 앞으로" };
 
 // ---------------------------------------------------------------------------
 // 문제 만들기 — 세 구역에 붙일 분수 세 개
 // ---------------------------------------------------------------------------
 function genRound(level) {
-  for (let tries = 0; tries < 300; tries++) {
+  for (let tries = 0; tries < 400; tries++) {
     let text, ans, wrongs;
     if (level === 1) {
-      const den = randInt(2, 5), num = randInt(1, den - 1), k = randInt(2, 3);
-      if (gcd(num, den) !== 1) continue;
-      text = `${num}/${den} ÷ ${k}`;
-      ans = red(num, den * k);
-      wrongs = [red(num, den), red(num * k, den), red(num, den + k)];
+      // ⭐1 — 단위분수 ÷ 자연수. 분모에 곱하기만 하면 끝난다.
+      const d = randInt(2, 5), k = randInt(2, 4);
+      text = `1/${d} ÷ ${k}`;
+      ans = red(1, d * k);
+      wrongs = [red(1, d + k), red(k, d), red(1, d)];
     } else if (level === 2) {
-      const b = randInt(2, 5), a = randInt(1, Math.min(3, b - 1)), m = randInt(2, 3);
-      if (gcd(a, b) !== 1) continue;
-      text = `${a}/${b} ÷ 1/${b * m}`;
-      ans = red(a * m, 1);
-      wrongs = [red(a, b * b * m), red(a, b), red(a * m, b)];
+      // ⭐2 — 진분수 ÷ 자연수
+      const d = randInt(3, 7), n = randInt(2, d - 1), k = randInt(2, 4);
+      if (gcd(n, d) !== 1) continue;
+      text = `${n}/${d} ÷ ${k}`;
+      ans = red(n, d * k);
+      wrongs = [red(n, d), red(n * k, d), red(n, d + k)];
     } else {
+      // ⭐3 — 분수 ÷ 분수
       const b = randInt(2, 5), d = randInt(2, 5);
       const a = randInt(1, b - 1), c = randInt(1, d - 1);
       if (gcd(a, b) !== 1 || gcd(c, d) !== 1) continue;
@@ -183,18 +179,18 @@ function genRound(level) {
       seen.add(fkey(wv)); picks.push(wv);
     }
     if (picks.length < 2 || ans.p / ans.q > 9) continue;
-    const cells = shuffle([{ f: ans, ok: true }, { f: picks[0], ok: false }, { f: picks[1], ok: false }]);
     return {
-      text, ans, cells,
-      hint: level === 1 ? "나누면 몫은 원래 분수보다 작아져요"
-        : level === 2 ? "1보다 작은 수로 나누면 몫은 커져요!"
+      text, ans,
+      cells: [{ f: ans, ok: true }, { f: picks[0], ok: false }, { f: picks[1], ok: false }],
+      hint: level === 1 ? "자연수로 나누면 분모에 곱해요"
+        : level === 2 ? "분자는 그대로, 분모에 곱해요"
         : "÷ 를 × 로 바꾸고 뒤 분수를 뒤집어요",
     };
   }
   const ans = red(1, 4);
   return { text: "1/2 ÷ 2", ans,
     cells: [{ f: ans, ok: true }, { f: red(1, 2), ok: false }, { f: red(1, 1), ok: false }],
-    hint: "나누면 몫은 작아져요" };
+    hint: "자연수로 나누면 분모에 곱해요" };
 }
 
 const poseTracker = new PoseTracker();
@@ -222,12 +218,12 @@ async function init() {
     unit: UNIT,
     title: "분수 배드민턴",
     lines: [
-      "상대와 <b>진짜 랠리</b>를 해요! 셔틀콕이 오면 <b>그 자리로 달려가</b> 받아쳐요.",
+      "위에 문제가 나와요. <b>답을 계산</b>해 두세요!",
+      "셔틀콕마다 <b>분수가 하나씩</b> 적혀 날아와요.",
       mode === "motion"
-        ? "<b>점프하면 뒤로, 그냥 치면 가운데, 몸을 낮추면 앞으로</b> 날아가요."
-        : "<b>위쪽을 누르면 뒤로, 가운데는 가운데, 아래쪽은 앞으로</b> 날아가요.",
-      "상대 코트 <b>세 구역에 분수</b>가 적혀 있어요. <b>답이 있는 구역</b>에 꽂으면 득점!",
-      "틀린 구역이면 상대가 받아쳐서 <b>랠리가 계속돼요.</b> 놓치면 상대 득점!",
+        ? "<b>좌우로 뛰어가서</b> 정답 셔틀콕을 <b>팔을 휘둘러</b> 받아쳐요!"
+        : "<b>좌우로 움직여</b> 정답 셔틀콕을 <b>클릭해서</b> 받아쳐요!",
+      "<b>오답 셔틀콕은 아웃!</b> 치지 말고 그냥 떨어뜨려요.",
     ],
   });
 
@@ -244,12 +240,12 @@ const startGate = new StartGate(mode, holdFill);
 
 let autoDiff, count, oppScore, playEndAt;
 let round = null, roundAt;
-let shuttle = null;            // { x, y, vx, vy, side:"me"|"opp", zone }
-let me = { x: 0, stance: "mid", jumpUntil: 0, swing: 0 };
+let shuttle = null;            // { x, y, vx, vy, g, side:"me"|"opp", cellIdx }
+let me = { x: 0, jumpUntil: 0, swing: 0 };
 let opp = { x: 0, target: 0, mood: "idle" };
-let rally = 0, maxRally = 0;
+let serveQueue = [], serveIdx = 0;   // 이번 문제에서 날려 보낼 셔틀콕 순서
+let hits = 0;         // 받아친 횟수 (기록용)
 let speedUp = 0;      // 연속 성공 횟수 — 이만큼만 빨라진다
-let firstServe = true;  // 첫 서브는 beginPlay 가 만든 문제를 그대로 쓴다
 let missStreak = 0;   // 같은 문제를 몇 번 놓쳤는가 (힌트를 켜는 기준)
 let paused = 0;                // 득점 후 잠깐 멈춤
 let bannerMsg = null;
@@ -260,26 +256,10 @@ const recIndicator = document.getElementById("recIndicator");
 let cursors = [];
 let lastFrameAt = 0;
 
-// 어깨가 가장 높았던 자리를 기억해 "선 자세"의 기준으로 삼는다
-let shoulderTop = null;
-function stanceFromBody() {
-  const now = performance.now();
-  if (now < me.jumpUntil) return "high";
-  if (mode === "motion") {
-    const f = motion.last;
-    if (!f) return "mid";
-    const y = f.sc.y;
-    if (shoulderTop === null || y < shoulderTop) shoulderTop = y;
-    else shoulderTop += (y - shoulderTop) * 0.0015;
-    const depth = (y - shoulderTop) / f.unit;
-    return depth > 0.30 ? "low" : "mid";
-  }
-  const p = cursors[0];
-  if (!p) return "mid";
-  if (p.y < dims.h * 0.46) return "high";
-  if (p.y > dims.h * 0.72) return "low";
-  return "mid";
-}
+function isJumping() { return performance.now() < me.jumpUntil; }
+
+// 라켓이 닿는 높이 — 뛰면 더 높은 곳에서 때릴 수 있고, 그게 곧 스매시다
+function racketY() { return dims.h * (isJumping() ? SMASH_Y : HIT_Y); }
 
 // party 의 판정 문구는 주어진 좌표에 그대로 그려진다.
 // 셔틀콕이 화면 끝에서 떨어지면 글자가 잘리므로 안쪽으로 당겨 준다.
@@ -302,33 +282,9 @@ function drawStreak(ctx) {
   ctx.restore();
 }
 
-// ── 도움 화살표 ── 같은 문제를 두 번 놓치면 정답 자리를 알려 준다.
+// ── 도움 표시 ── 같은 문제를 두 번 놓치면 정답 셔틀콕을 금색으로 알려 준다.
 // 계속 틀리기만 하면 아이는 포기한다. "한 번은 맞혀 보는 경험"이 있어야 다음 문제를 시도한다.
 function helpOn() { return missStreak >= 2; }
-function drawHelp(ctx) {
-  if (!helpOn() || !round) return;
-  const zi = round.cells.findIndex((c) => c.ok);
-  if (zi < 0) return;
-  const z = zoneRects()[zi];
-  const { h } = dims;
-  const cx = (z.x0 + z.x1) / 2;
-  const t = (performance.now() % 900) / 900;
-  const gy = groundY();
-  ctx.save();
-  ctx.globalAlpha = 0.85;
-  ctx.strokeStyle = PARTY.gold;
-  ctx.lineWidth = fluidPx(dims, 7, { min: 5, max: 11 });
-  ctx.lineCap = "round"; ctx.lineJoin = "round";
-  const ay = gy - h * 0.09 - t * h * 0.02;
-  ctx.beginPath();
-  ctx.moveTo(cx, ay - h * 0.05); ctx.lineTo(cx, ay);
-  ctx.moveTo(cx - h * 0.022, ay - h * 0.022); ctx.lineTo(cx, ay); ctx.lineTo(cx + h * 0.022, ay - h * 0.022);
-  ctx.stroke();
-  ctx.restore();
-  const fs = fluidPx(dims, 18, { min: 13, max: 24 });
-  drawChunkyText(ctx, "여기예요!", cx, ay - h * 0.075, fs, PARTY.gold,
-    { outline: CUTE.ink, outlineWidth: Math.max(3, fs * 0.24) });
-}
 
 function isSpurt() { return playEndAt - performance.now() < 10000; }
 // 랠리가 이어질수록 셔틀콕이 빨라진다
@@ -346,20 +302,30 @@ function flightT() {
 // 공이 몇 초씩 안 보인다(느린 난이도일수록 더 심하다).
 // 그래서 중력을 T에 맞춰 정해, <비행 시간과 무관하게 최고점이 화면 안>에 오게 한다.
 function launch(x, y, tx, ty, T) {
-  const g = (dims.h * 3.99) / (T * T);   // 최고점이 출발점보다 약 0.45h 위
+  // 3.99 를 쓰면 최고점이 출발점보다 0.45h 위 — 화면으로는 0.22h 지점이라
+  // 문제 배너(0.13h~0.25h) 뒤로 셔틀콕이 숨어 버린다. 3.0 이면 0.34h 에 뜬다.
+  const g = (dims.h * 3.0) / (T * T);
   return { x, y, vx: (tx - x) / T, vy: (ty - y - 0.5 * g * T * T) / T, g };
 }
 
-function newRound(serveOnly) {
-  if (!serveOnly) { round = genRound(autoDiff.level); rally = 0; }
+function newProblem() {
+  round = genRound(autoDiff.level);
+  // 정답 셔틀콕이 몇 번째로 오는지는 매번 다르다 — 순서를 외워서 이길 수 없게
+  serveQueue = shuffle([0, 1, 2]);
+  serveIdx = 0;
+  roundAt = performance.now();
+}
+
+// 셔틀콕 한 개를 넘긴다. 내 코트 아무 데로나 떨어지므로 쫓아 달려야 한다.
+function serveNext() {
+  if (serveIdx >= serveQueue.length) newProblem();
+  const idx = serveQueue[serveIdx++];
   const { w, h } = dims;
-  // 상대가 내 코트 아무 데로나 보낸다 — 셔틀콕을 쫓아 달리는 것 자체가 운동이다
-  const tx = w * (0.58 + Math.random() * 0.34);
+  const tx = w * (0.60 + Math.random() * 0.32);
   const sx = w * 0.20, sy = h * 0.66;
   opp.x = sx; opp.target = sx;
   const v = launch(sx, sy, tx, groundY() - h * 0.02, flightT());
-  shuttle = { ...v, side: "opp", zone: -1 };
-  roundAt = performance.now();
+  shuttle = { ...v, side: "opp", cellIdx: idx };
 }
 
 function startCountdown() {
@@ -387,16 +353,15 @@ function beginPlay() {
   state = "playing";
   const prev = HighScore.get(UNIT);
   autoDiff = new AutoDifficulty(levelFromUrl(AutoDifficulty.startLevelFromHighScore(prev)));
-  count = 0; oppScore = 0; rally = 0; maxRally = 0;
+  count = 0; oppScore = 0; hits = 0;
   speedUp = 0; missStreak = 0;
   party.reset();
   confetti = []; sparks = [];
   playEndAt = performance.now() + 60000;
   lastFrameAt = 0;
-  paused = 0; bannerMsg = null; shoulderTop = null;
+  paused = 0; bannerMsg = null;
   me.x = dims.w * 0.75;
-  round = genRound(1);
-  firstServe = true;
+  newProblem();
   shuttle = null;
   paused = performance.now() + 2000;   // 문제를 읽고 자리 잡을 틈을 준다
 
@@ -416,72 +381,81 @@ function beginPlay() {
 }
 
 // ── 내가 받아친다 ──
-function hitByMe() {
-  const zi = STANCE_ZONE[me.stance];
-  const z = zoneRects()[zi];
-  const tx = (z.x0 + z.x1) / 2;
-  const v = launch(shuttle.x, shuttle.y, tx, groundY() - dims.h * 0.02, flightT());
-  shuttle = { ...v, side: "me", zone: zi };
+function hitByMe(smash) {
+  const cell = round.cells[shuttle.cellIdx];
+  const { w, h } = dims;
+  const tx = w * (0.06 + Math.random() * 0.34);
+  const v = launch(shuttle.x, shuttle.y, tx, groundY() - h * 0.02, smash ? 0.55 : 0.95);
+  const x = shuttle.x, y = shuttle.y;
+  shuttle = { ...v, side: "me", cellIdx: shuttle.cellIdx };
   me.swing = 1;
-  rally++;
-  if (rally > maxRally) maxRally = rally;
-  opp.target = tx;
+  hits++;
   if (!isMuted()) sound.swoosh();
-  shake.trigger(me.stance === "high" ? 8 : 4, 130);
-  spawnSparkles(sparks, shuttle.x, shuttle.y, 10, ["#fff", PARTY.gold]);
-}
+  spawnSparkles(sparks, x, y, 12, ["#fff", PARTY.gold]);
 
-// ── 셔틀콕이 상대 코트에 닿았다 ──
-function landOnOpponent() {
-  const ok = round.cells[shuttle.zone].ok;
-  const x = shuttle.x, y = groundY();
-  if (ok) {
+  if (cell.ok) {
     count++;
-    const perfect = rally <= 1 && missStreak === 0;
-    const base = (perfect ? 16 : 10 + Math.min(8, rally * 2)) * (isSpurt() ? 2 : 1);
-    party.correct(safeX(x), y, { base, elapsedMs: 1200 });
+    // 점프해서 높은 타점으로 때리면 스매시 — 몸을 더 쓴 만큼 코인이 더 붙는다
+    const base = (smash ? 18 : 11) * (isSpurt() ? 2 : 1);
+    party.correct(safeX(x), y, { base, elapsedMs: performance.now() - roundAt });
     if (party.combo > 0 && party.combo === party.maxCombo) comboShot.capture(canvas);
     autoDiff.reportCorrect();
     autoRec.trigger();
     speedUp++;
     missStreak = 0;
     noteStreak(party.combo);
-    shake.trigger(12, 240);
+    shake.trigger(smash ? 14 : 8, 240);
     if (!isMuted()) sound.hit("perfect");
-    spawnSparkles(sparks, x, y, 34, ["#fff", PARTY.gold, CUTE.red]);
-    spawnConfetti(confetti, x, y - dims.h * 0.1, 40);
+    spawnConfetti(confetti, x, y, smash ? 46 : 30);
     opp.mood = "sad";
-    bannerMsg = { text: perfect ? "✨ 퍼펙트! 한 번에 성공!" : rally >= 4 ? `🔥 ${rally}구 랠리 끝에 득점!` : "득점!", color: PARTY.gold, until: performance.now() + 1300 };
-    shuttle = null;
-    paused = performance.now() + 900;
+    bannerMsg = { text: smash ? "💥 스매시 득점!" : "🏸 득점!", color: PARTY.gold, until: performance.now() + 1200 };
+    scheduleNext(true, 950);
   } else {
-    // 틀린 구역 — 상대가 받아쳐서 랠리가 이어진다. 같은 문제로 다시 도전!
-    opp.mood = "happy";
+    // 아웃 셔틀콕을 쳤다 — 배드민턴에서 아웃을 받아치면 상대 점수다
+    oppScore++;
+    speedUp = Math.max(0, speedUp - 1);
     missStreak++;
-    const { w, h } = dims;
-    const tx = w * (0.58 + Math.random() * 0.34);
-    const v = launch(shuttle.x, groundY() - h * 0.10, tx, groundY() - h * 0.02, flightT());
-    shuttle = { ...v, side: "opp", zone: -1 };
-    rally++;
-    if (rally > maxRally) maxRally = rally;
-    if (!isMuted()) sound.pop();
-    bannerMsg = { text: "상대가 받아쳤어요!", color: CUTE.blue, until: performance.now() + 900 };
+    party.wrong(safeX(x), y, "아웃을 쳤어요!");
+    autoDiff.reportWrong();
+    if (!isMuted()) sound.wrong();
+    shake.trigger(7, 200);
+    opp.mood = "happy";
+    bannerMsg = { text: `정답은 ${fracText(round.ans.p, round.ans.q)}`, color: CUTE.red, until: performance.now() + 1400 };
+    scheduleNext(true, 1150);
   }
 }
 
-// ── 내가 놓쳤다 ──
-function missed() {
-  oppScore++;
-  speedUp = Math.max(0, speedUp - 1);
-  missStreak++;
-  party.wrong(safeX(shuttle.x), groundY() - dims.h * 0.06, `정답은 ${fracText(round.ans.p, round.ans.q)}`);
-  autoDiff.reportWrong();
-  if (!isMuted()) sound.wrong();
-  shake.trigger(7, 200);
-  opp.mood = "happy";
-  bannerMsg = { text: "놓쳤어요! 상대 득점", color: CUTE.red, until: performance.now() + 1200 };
+// 다음에 무엇을 할지 예약한다. nextProblem 이면 새 문제, 아니면 같은 문제의 다음 셔틀콕.
+let wantNewProblem = false;
+function scheduleNext(nextProblem, ms) {
+  wantNewProblem = nextProblem;
+  paused = performance.now() + ms;
+}
+
+// ── 셔틀콕이 내 코트 바닥에 떨어졌다 ──
+function shuttleLanded() {
+  const cell = round.cells[shuttle.cellIdx];
+  const x = shuttle.x;
   shuttle = null;
-  paused = performance.now() + 900;
+  if (cell.ok) {
+    // 정답을 놓쳤다 — 상대 득점
+    oppScore++;
+    speedUp = Math.max(0, speedUp - 1);
+    missStreak++;
+    party.wrong(safeX(x), groundY() - dims.h * 0.06, `정답은 ${fracText(round.ans.p, round.ans.q)}`);
+    autoDiff.reportWrong();
+    if (!isMuted()) sound.wrong();
+    shake.trigger(7, 200);
+    opp.mood = "happy";
+    bannerMsg = { text: "정답 셔틀콕을 놓쳤어요!", color: CUTE.red, until: performance.now() + 1300 };
+    scheduleNext(true, 1100);
+  } else {
+    // 아웃을 잘 흘려보냈다 — 벌점은 없지만 "잘 참았다"고 알려 준다.
+    // 안 치는 것도 판단이므로, 아무 반응이 없으면 아이는 자기가 잘한 줄 모른다.
+    party.judge(safeX(x), groundY() - dims.h * 0.10, "아웃! 잘 참았어요", CUTE.blue);
+    if (!isMuted()) sound.pop();
+    scheduleNext(false, 420);
+  }
 }
 
 function endGame() {
@@ -492,10 +466,10 @@ function endGame() {
   if (!prev || count >= prev.count) {
     HighScore.set(UNIT, { count, bestLevel: autoDiff.level, label: `${medal} ${count}${RECORD_SUFFIX}`, at: Date.now() });
   }
-  renderPodium({ unit: UNIT, medal, label, coins: party.coins, maxCombo: maxRally, count, suffix: RECORD_SUFFIX, best });
+  renderPodium({ unit: UNIT, medal, label, coins: party.coins, maxCombo: party.maxCombo, count, suffix: RECORD_SUFFIX, best });
   document.getElementById("statCount").textContent = count + "점";
   document.getElementById("statBest").textContent = best + "점";
-  document.getElementById("statCombo").textContent = "🏸" + maxRally + "구";
+  document.getElementById("statCombo").textContent = "🔥" + party.maxCombo;
 
   const shot = comboShot.captured ? comboShot : fallbackShot;
   const previewVideo = document.getElementById("previewVideo");
@@ -537,7 +511,9 @@ function goReady() {
   }, 500);
 }
 
-// ── 내 위치·자세 ──
+// ── 내 위치 · 스윙 ──
+const SWING_SPEED = 1.35;   // 어깨 너비/초 — 이보다 빠르면 휘두른 것
+
 function readBody(dt) {
   const { w } = dims;
   let px = null;
@@ -545,7 +521,7 @@ function readBody(dt) {
     const f = motion.last;
     if (f) px = f.sc.x;
     const j = motion.jump();
-    if (j && j.power > 0.17) me.jumpUntil = performance.now() + 420;
+    if (j && j.power > 0.17) me.jumpUntil = performance.now() + 480;
   } else if (cursors[0]) {
     px = cursors[0].x;
   }
@@ -554,8 +530,19 @@ function readBody(dt) {
     const target = Math.max(w * 0.53, Math.min(w * 0.96, px));
     me.x += (target - me.x) * Math.min(1, dt * 11);
   }
-  me.stance = stanceFromBody();
   me.swing = Math.max(0, me.swing - dt * 3.5);
+}
+
+// 지금 휘둘렀는가.
+// 모션에서는 <몸통 이동분을 뺀> 손목 속도를 본다. 코트를 좌우로 달리면 손목도 몸과 함께
+// 실려 가기 때문에, 절대 속도로 재면 달리기가 전부 스윙으로 잡힌다.
+function swungNow() {
+  if (mode === "motion") {
+    const sw = motion.swingRel();
+    return !!(sw && sw.speed > SWING_SPEED);
+  }
+  if (!pointerInput) return false;
+  return pointerInput.consumeJustDown();
 }
 
 // ── 그리기 ──
@@ -571,22 +558,17 @@ function drawCourt(ctx) {
   ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(w, gy); ctx.stroke();
   ctx.restore();
 
-  // 상대 코트 세 구역
-  const zs = zoneRects();
-  const aim = STANCE_ZONE[me.stance];
-  const fs = Math.min(fluidPx(dims, 30, { min: 20, max: 42 }), (zs[0].x1 - zs[0].x0) * 0.42);
-  for (let i = 0; i < zs.length; i++) {
-    const z = zs[i];
-    const hot = i === aim && shuttle && shuttle.side === "opp";
+  // 내 타점 — 지금 라켓이 닿는 높이를 옅은 띠로 보여 준다.
+  // "언제 휘둘러야 하는지"가 눈에 안 보이면 타이밍을 배울 수 없다.
+  if (shuttle && shuttle.side === "opp") {
+    const ry = racketY(), reach = w * 0.13;
     ctx.save();
-    ctx.fillStyle = hot ? "rgba(255,212,59,0.55)" : "rgba(255,255,255,0.10)";
-    ctx.fillRect(z.x0, gy - h * 0.055, z.x1 - z.x0, h * 0.055);
-    ctx.strokeStyle = hot ? PARTY.gold : "rgba(255,255,255,0.7)";
-    ctx.lineWidth = hot ? fluidPx(dims, 5, { min: 4, max: 8 }) : fluidPx(dims, 2, { min: 1.5, max: 3 });
-    ctx.strokeRect(z.x0, gy - h * 0.055, z.x1 - z.x0, h * 0.055);
+    ctx.fillStyle = isJumping() ? "rgba(255,212,59,0.30)" : "rgba(255,255,255,0.16)";
+    ctx.fillRect(me.x - reach, ry - h * 0.055, reach * 2, h * 0.11);
+    ctx.strokeStyle = isJumping() ? PARTY.gold : "rgba(255,255,255,0.6)";
+    ctx.lineWidth = fluidPx(dims, 3, { min: 2, max: 5 });
+    ctx.strokeRect(me.x - reach, ry - h * 0.055, reach * 2, h * 0.11);
     ctx.restore();
-    drawChunkyText(ctx, fracText(round.cells[i].f.p, round.cells[i].f.q), (z.x0 + z.x1) / 2, gy - h * 0.0275,
-      fs, "#fff", { outline: CUTE.ink, outlineWidth: Math.max(3, fs * 0.22) });
   }
 
   // 네트
@@ -609,10 +591,9 @@ function drawMe(ctx, now) {
   const { w, h } = dims;
   const gy = groundY();
   const jumping = now < me.jumpUntil;
-  const crouch = me.stance === "low";
-  const y = gy - (jumping ? h * 0.10 : 0);
+  const y = gy - (jumping ? h * 0.13 : 0);
   const r = fluidPx(dims, 26, { min: 19, max: 36 });
-  const bodyH = crouch ? r * 1.1 : r * 1.8;
+  const bodyH = r * 1.8;
   // 몸
   ctx.save();
   ctx.fillStyle = CUTE.red;
@@ -623,8 +604,8 @@ function drawMe(ctx, now) {
   ctx.fill(); ctx.stroke();
   ctx.restore();
   drawSticker(ctx, me.x, y - bodyH - r * 0.55, r * 0.62, CUTE.cream, { lineWidth: Math.max(3, r * 0.14) });
-  // 라켓 — 자세에 따라 각도가 바뀐다
-  const ang = me.stance === "high" ? -1.1 : me.stance === "low" ? 0.5 : -0.4;
+  // 라켓 — 뛰면 더 높이 들린다
+  const ang = jumping ? -1.2 : -0.4;
   const sw = me.swing;
   ctx.save();
   ctx.translate(me.x - r * 0.2, y - bodyH * 0.8);
@@ -634,10 +615,11 @@ function drawMe(ctx, now) {
   ctx.beginPath(); ctx.ellipse(-r * 1.45, 0, r * 0.48, r * 0.34, 0, 0, Math.PI * 2);
   ctx.fillStyle = "rgba(255,255,255,0.55)"; ctx.fill(); ctx.stroke();
   ctx.restore();
-  // 자세 안내
-  const lf = fluidPx(dims, 17, { min: 13, max: 23 });
-  drawChunkyText(ctx, STANCE_LABEL[me.stance], me.x, gy + h * 0.05, lf, PARTY.gold,
-    { outline: CUTE.ink, outlineWidth: Math.max(3, lf * 0.22) });
+  if (jumping) {
+    const lf = fluidPx(dims, 17, { min: 13, max: 23 });
+    drawChunkyText(ctx, "💥 스매시 찬스!", me.x, gy + h * 0.05, lf, PARTY.gold,
+      { outline: CUTE.ink, outlineWidth: Math.max(3, lf * 0.22) });
+  }
 }
 
 function drawOpp(ctx, dt) {
@@ -650,6 +632,17 @@ function drawOpp(ctx, dt) {
 function drawShuttle(ctx) {
   if (!shuttle) return;
   const r = fluidPx(dims, 17, { min: 12, max: 24 });
+  const cell = round.cells[shuttle.cellIdx];
+  // 두 번 연속 틀렸으면 정답 셔틀콕을 금색 고리로 알려 준다
+  if (helpOn() && cell.ok && shuttle.side === "opp") {
+    const t = (performance.now() % 800) / 800;
+    ctx.save();
+    ctx.globalAlpha = 0.9 * (1 - t * 0.5);
+    ctx.strokeStyle = PARTY.gold;
+    ctx.lineWidth = Math.max(4, r * 0.4);
+    ctx.beginPath(); ctx.arc(shuttle.x, shuttle.y, r * (1.9 + t * 0.7), 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
   drawSticker(ctx, shuttle.x, shuttle.y, r, CUTE.cream, { lineWidth: Math.max(2.5, r * 0.15) });
   ctx.save();
   ctx.strokeStyle = CUTE.ink; ctx.lineWidth = Math.max(2, r * 0.13); ctx.lineCap = "round";
@@ -668,6 +661,15 @@ function drawShuttle(ctx) {
   ctx.ellipse(shuttle.x, groundY(), r * 0.9, r * 0.24, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
+  // 이 셔틀콕에 적힌 분수 — 이게 곧 보기다.
+  // 셔틀콕이 높이 떠 있을 때 위에 붙이면 문제 배너에 가려지므로 그때는 아래로 붙인다.
+  const fs = fluidPx(dims, 26, { min: 19, max: 36 });
+  const ly = shuttle.y < dims.h * 0.40 ? shuttle.y + r * 2.6 : shuttle.y - r * 2.4;
+  const lx = Math.max(fs * 1.7, Math.min(dims.w - fs * 1.7, shuttle.x));
+  drawStickerRect(ctx, lx, ly, fs * 3.0, fs * 1.8, fs * 0.45,
+    CUTE.cream, { lineWidth: Math.max(3, fs * 0.13), drop: fs * 0.16 });
+  drawChunkyText(ctx, fracText(cell.f.p, cell.f.q), lx, ly, fs * 0.95,
+    CUTE.ink, { outline: "#fff", outlineWidth: Math.max(2, fs * 0.12) });
 }
 
 function loop(tsMs) {
@@ -713,30 +715,30 @@ function stepGame() {
   readBody(dt);
 
   // ── 셔틀콕 물리 ──
+  const swung = swungNow();
   if (shuttle) {
     shuttle.x += shuttle.vx * dt;
     shuttle.y += shuttle.vy * dt;
     shuttle.vy += (shuttle.g || dims.h * 2.1) * dt;
 
     if (shuttle.side === "opp") {
-      // 내가 받아칠 수 있는가 — 내려오는 중이고, 내 라켓 범위 안이면 자동으로 친다
-      const reach = w * 0.115;
-      if (shuttle.vy > 0 && shuttle.y >= h * HIT_Y && Math.abs(shuttle.x - me.x) <= reach && shuttle.x > netX()) {
-        hitByMe();
-      } else if (shuttle.y >= groundY()) {
-        missed();
-      }
-    } else {
-      if (shuttle.y >= groundY() - h * 0.01) landOnOpponent();
+      // 라켓 범위 안에서 <휘둘렀을 때만> 맞는다.
+      // 예전에는 범위에 들어오면 자동으로 쳤는데, 그러면 <안 치는 선택>을 할 수가 없다.
+      const reach = w * 0.13, ry = racketY();
+      const inReach = Math.abs(shuttle.x - me.x) <= reach && Math.abs(shuttle.y - ry) <= h * 0.055
+        && shuttle.x > netX();
+      if (inReach && swung) hitByMe(isJumping());
+      else if (shuttle.y >= groundY()) shuttleLanded();
+    } else if (shuttle.y >= groundY() - h * 0.01) {
+      shuttle = null;   // 내가 넘긴 셔틀콕 — 판정은 칠 때 이미 끝났다
     }
   } else if (paused && now > paused) {
     paused = 0;
-    newRound(!firstServe ? false : true);
-    firstServe = false;
+    if (wantNewProblem) newProblem();
+    serveNext();
   }
 
   drawCourt(ctx);
-  drawHelp(ctx);
   drawOpp(ctx, dt);
   drawMe(ctx, now);
   drawShuttle(ctx);
@@ -745,8 +747,8 @@ function stepGame() {
   const sfs = fluidPx(dims, 22, { min: 16, max: 30 });
   drawStickerRect(ctx, w * 0.5, h * 0.925, sfs * 9, sfs * 1.9, sfs * 0.5, CUTE.cream,
     { lineWidth: Math.max(3, sfs * 0.15), drop: sfs * 0.18 });
-  drawChunkyText(ctx, `나 ${count}  :  ${oppScore} 상대   🏸 랠리 ${rally}`, w * 0.5, h * 0.925, sfs * 0.82,
-    CUTE.ink, { outline: "#fff", outlineWidth: Math.max(2, sfs * 0.12) });
+  drawChunkyText(ctx, `나 ${count}  :  ${oppScore} 상대   🏸 ${Math.min(serveIdx, 3)}/3번째`, w * 0.5, h * 0.925,
+    sfs * 0.82, CUTE.ink, { outline: "#fff", outlineWidth: Math.max(2, sfs * 0.12) });
 
   const hudBottom = party.drawHud(ctx, dims, { remainMs: remain, count, suffix: "점" });
   drawCuteBanner(ctx, dims, [
@@ -771,6 +773,12 @@ function stepGame() {
       { outline: "#fff", outlineWidth: Math.max(4, fs * 0.24) });
     ctx.restore();
   }
+
+  drawChunkyText(ctx,
+    mode === "motion" ? "정답 셔틀콕만 받아쳐요! 뛰면서 팔을 휘두르면 스매시"
+      : "정답 셔틀콕만 받아쳐요! 클릭하면 스윙",
+    w * 0.5, h * 0.985, fluidPx(dims, 14, { min: 11, max: 19 }), "#fff",
+    { outline: CUTE.ink, outlineWidth: fluidPx(dims, 5, { min: 3.5, max: 7 }) });
 
   party.update(dt);
   confetti = updateConfetti(confetti, dt); drawConfetti(ctx, confetti);

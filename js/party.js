@@ -23,12 +23,12 @@ export const PARTY = {
 // 이모지 기반이라 이미지 파일 없이 바로 동작하고, 나중에 그림으로 교체할 수 있다.
 // ---------------------------------------------------------------------------
 export const CHARACTERS = {
-  n1: { emoji: "🦅", name: "셔틀", color: CUTE.red, cheer: "몫이 있는 자리로 날아가!" },
-  n2: { emoji: "🦉", name: "조준이", color: CUTE.blue, cheer: "숨 참고, 소수점을 잘 봐!" },
-  n3: { emoji: "🐨", name: "돌리", color: CUTE.green, cheer: "손을 휘둘러 돌려 보자!" },
-  n4: { emoji: "🐯", name: "스파이크", color: CUTE.orange, cheer: "비율대로 나누고 내리꽂아!" },
-  n5: { emoji: "🦌", name: "샤프", color: CUTE.purple, cheer: "반지름 곱하기 반지름 곱하기 3.14!" },
-  n6: { emoji: "🐧", name: "카고", color: CUTE.cyan, cheer: "팔은 반지름, 다리는 높이야!" },
+  n1: { emoji: "🦅", name: "셔틀", color: CUTE.red, cheer: "정답 셔틀콕만 받아쳐!" },
+  n2: { emoji: "🦉", name: "조준이", color: CUTE.blue, cheer: "두 손 모으고, 소수점을 잘 봐!" },
+  n3: { emoji: "🐨", name: "던지", color: CUTE.green, cheer: "정답 카드에 던져서 맞히자!" },
+  n4: { emoji: "🐯", name: "스파이크", color: CUTE.orange, cheer: "정답 자리로 달려가 내리꽂아!" },
+  n5: { emoji: "🦌", name: "샤프", color: CUTE.purple, cheer: "활을 당겨! 반지름×반지름×3.14" },
+  n6: { emoji: "🐧", name: "카고", color: CUTE.cyan, cheer: "무거운 화물은 힘껏 들어 올려!" },
 };
 
 // 표정 5종 — 캐릭터 아래에 작게 붙는 기분 뱃지
@@ -324,6 +324,12 @@ export class Party {
     }
     if (!this.isMuted()) { this.sound.correct(); setTimeout(() => { if (!this.isMuted()) this.sound.pop(); }, 90); }
     return gain;
+  }
+
+  // 정답·오답 판정과 상관없는 짧은 안내를 띄운다 (빗나감, 퍼펙트 보너스 같은 것).
+  // 콤보나 기분에는 손대지 않는다.
+  judge(x, y, text, color = PARTY.gold) {
+    this.judges.push({ x, y, text, color, born: performance.now(), life: 900, mult: 1 });
   }
 
   // 오답 — 점수를 깎지 않는다. 콤보만 끊고 캐릭터가 아쉬워한다.
