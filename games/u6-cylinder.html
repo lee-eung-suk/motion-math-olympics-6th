@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>우주 화물 수송대 · 종목 6</title>
+<title>몸으로 원기둥 만들기 · 종목 6</title>
 <link rel="stylesheet" href="../css/style.css?v=6">
 </head>
 <body>
@@ -18,16 +18,16 @@
   </div>
 
   <div class="overlay-panel" id="loadingPanel">
-    <h2>🚀 우주 화물 수송대</h2>
+    <h2>🚀 몸으로 원기둥 만들기</h2>
     <p id="loadingText">준비 중…</p>
   </div>
 
   <div class="overlay-panel" id="rulePanel" style="display:none">
     <div class="rule-card">
       <div class="rule-head">
-        <div class="rule-char">🚀</div>
+        <div class="rule-char">🛢️</div>
         <div>
-          <h2 class="rule-title">우주 화물 수송대</h2>
+          <h2 class="rule-title">몸으로 원기둥 만들기</h2>
         </div>
       </div>
       <ul class="rule-list"></ul>
@@ -53,7 +53,7 @@
   <div class="overlay-panel" id="resultPanel" style="display:none">
     <div id="podium"></div>
     <div class="result-stats">
-      <div class="stat-box"><div class="num" id="statCount">0개</div><div class="label">실은 화물</div></div>
+      <div class="stat-box"><div class="num" id="statCount">0개</div><div class="label">만든 원기둥</div></div>
       <div class="stat-box"><div class="num" id="statBest">0개</div><div class="label">최고 기록</div></div>
       <div class="stat-box"><div class="num" id="statCombo">0</div><div class="label">최고 콤보</div></div>
     </div>
@@ -91,8 +91,8 @@ import {
 requestWakeLock();
 
 const UNIT = "n6";
-const TITLE = "우주 화물 수송대";
-const RECORD_SUFFIX = "개 적재";
+const TITLE = "몸으로 원기둥 만들기";
+const RECORD_SUFFIX = "개 성공";
 const MEDALS = { bronze: 6, silver: 11, gold: 16 };
 const mode = InputMode.get();
 const PI = 3.14;
@@ -104,8 +104,6 @@ let drifters = makeDrifters(8, dims.w, dims.h);
 window.addEventListener("resize", () => {
   dims = fitCanvasToScreen(canvas);
   drifters = makeDrifters(8, dims.w, dims.h);
-  // 화물은 화면 비율로 놓여 있으므로 크기가 바뀌면 다시 세워야 한다
-  cargos.forEach((c, i) => { c.x = dims.w * (0.22 + i * 0.28); c.y = dims.h * FLOOR_Y; });
 });
 
 const sound = new SoundKit();
@@ -124,66 +122,57 @@ function lerpMap(v, a, b, ra, rb) { const t = Math.max(0, Math.min(1, (v - a) / 
 
 const volCyl = (r, h) => +(PI * r * r * h).toFixed(2);
 const volCone = (r, h) => +((PI * r * r * h) / 3).toFixed(2);
-const volSphere = (r) => +((4 / 3) * PI * r * r * r).toFixed(2);
-const surfCyl = (r, h) => +(2 * PI * r * r + 2 * PI * r * h).toFixed(2);
-function measure(c, metric) {
-  if (metric === "S") return surfCyl(c.r, c.h);
-  return c.kind === "cone" ? volCone(c.r, c.h) : c.kind === "sphere" ? volSphere(c.r) : volCyl(c.r, c.h);
-}
-
 // ---------------------------------------------------------------------------
-// 문제 만들기
+// 문제 만들기 — 「몸으로 원기둥을 만든다」
 //
-// 예전에는 <부피를 주고 반지름·높이를 역산>하게 했다. 교과서에 없는 유형인 데다
-// 두 값을 동시에 더듬느라 한 문제에 15초가 걸려 리듬이 죽었다.
-// 이제는 <컨베이어로 흘러오는 화물 셋 중, 요구 수치에 맞는 하나 고르기>다.
-// 계산은 공식을 한 번만 쓰면 된다.
+// 예전에는 <필요한 부피 113.04cm³ 에 맞는 화물 고르기>였다. 그 값은
+// 3.14 × 3 × 3 × 4 다. 곱셈 세 번에 소수점 처리까지, 종이 없이는 못 한다.
+//
+// 그래서 3.14 를 아이가 곱하지 않게 문제를 뒤집었다.
+//   "반지름 2 인 원기둥의 부피가 20 × 3.14. 높이를 만들어라"  →  4 × ? = 20  →  5
+// 계산은 나눗셈 한 번이고, 답은 <높이라는 길이>다.
+// 반지름은 양팔 너비로, 높이는 앉은 키로 만든다.
 // ---------------------------------------------------------------------------
+const R_MIN = 1, R_MAX = 6;    // 반지름 눈금 (양팔 너비)
+const H_MIN = 1, H_MAX = 6;    // 높이 눈금 (앉은 키)
+
 function genRound(level) {
-  const metric = level === 3 && Math.random() < 0.5 ? "S" : "V";
-  const kinds = level === 1 ? ["cyl", "cyl", "cyl"]
-    : level === 2 ? shuffle(["cyl", "cyl", "cone"])
-    : metric === "S" ? ["cyl", "cyl", "cyl"] : shuffle(["cyl", "cone", "sphere"]);
-
-  const seen = new Set();
-  const cargos = [];
-  for (let t = 0; t < 400 && cargos.length < 3; t++) {
-    const k = kinds[cargos.length];
-    // ⭐1은 3.14 × 반지름 × 반지름 × 높이 를 암산할 수 있는 크기로.
-    // 반지름 4·높이 4면 3.14×16×4 = 200.96 이라 기초학력 학생에게는 곱셈만으로 벽이 된다.
-    // 반지름을 3까지로 낮추면 가장 큰 값이 113.04 가 되어 손으로 따라 계산할 수 있다.
-    const r = level === 1 ? randInt(2, 3) : randInt(2, 7);
-    const h = level === 1 ? randInt(2, 4) : randInt(3, 9);
-    const c = { r, h, kind: k };
-    const v = measure(c, metric);
-    if (seen.has(v)) continue;
-    seen.add(v);
-    cargos.push({ ...c, v });
+  if (level === 1) {
+    // ⭐1 — 반지름을 고정해 주고 높이만 만든다. 나눗셈 한 번.
+    const r = randInt(1, 3), h = randInt(2, H_MAX);
+    return {
+      kind: "cyl", lock: "r", r, h,
+      ask: `부피가 ${r * r * h} × 3.14 인 원기둥을 만들어요!`,
+      sub: `반지름 ${r} 🔒 — 높이를 맞춰요`,
+      hint: "부피 = 반지름 × 반지름 × 높이 × 3.14",
+      show: `${r} × ${r} × ${h} = ${r * r * h}`,
+    };
   }
-  while (cargos.length < 3) cargos.push({ r: cargos.length + 2, h: 3, kind: "cyl", v: volCyl(cargos.length + 2, 3) });
-
-  const ansIdx = randInt(0, cargos.length - 1);
+  if (level === 2) {
+    // ⭐2 — 높이를 고정해 주고 반지름을 만든다. 나눗셈 뒤 곱셈구구를 거꾸로.
+    const r = randInt(2, R_MAX), h = randInt(1, 3);
+    return {
+      kind: "cyl", lock: "h", r, h,
+      ask: `부피가 ${r * r * h} × 3.14 인 원기둥을 만들어요!`,
+      sub: `높이 ${h} 🔒 — 반지름을 맞춰요`,
+      hint: "반지름 × 반지름 이 얼마여야 할까요?",
+      show: `${r} × ${r} × ${h} = ${r * r * h}`,
+    };
+  }
+  // ⭐3 — 원뿔은 같은 원기둥의 3분의 1. 같은 부피를 내려면 높이가 3배여야 한다.
+  const r = randInt(1, 3), hCyl = randInt(1, 2);
   return {
-    metric,
-    cargos: cargos.map((c, i) => ({ ...c, ok: i === ansIdx })),
-    target: cargos[ansIdx].v,
-    unitText: metric === "S" ? "cm²" : "cm³",
-    formula: metric === "S" ? "겉넓이 = 2×3.14×반지름×반지름 + 2×3.14×반지름×높이"
-      : level === 1 ? "부피 = 3.14 × 반지름 × 반지름 × 높이"
-      : level === 2 ? "원뿔의 부피는 같은 원기둥의 3분의 1이에요"
-      : "구의 부피 = 4/3 × 3.14 × 반지름 × 반지름 × 반지름",
-    title: metric === "S" ? "포장지 넓이가 맞는 화물은?"
-      : level === 1 ? "요구 부피에 맞는 화물을 실어요!"
-      : "모양이 섞여 있어요! 잘 보세요",
+    kind: "cone", lock: "r", r, h: hCyl * 3,
+    ask: `반지름 ${r}, 높이 ${hCyl} 인 원기둥과 부피가 같은 원뿔을 만들어요!`,
+    sub: `반지름 ${r} 🔒 — 높이를 맞춰요`,
+    hint: "원뿔의 부피는 같은 원기둥의 3분의 1이에요",
+    show: `높이 ${hCyl} × 3 = ${hCyl * 3}`,
   };
 }
 
-// ── 보너스: 몸으로 원기둥 만들기 (이 종목만의 동작을 특별한 순간으로 남긴다) ──
-const R_MIN = 2, R_MAX = 12;
-const ARM_MIN = 0.85, ARM_MAX = 2.75;
+// 5연속 보너스 — 계산은 없다. 두 값을 동시에 몸으로 만들면 된다.
 function genBonus() {
-  const r = randInt(3, 8), h = randInt(3, 8);
-  return { r0: r, h, target: volCyl(r, h), until: 0, holdMs: 0 };
+  return { r: randInt(2, R_MAX), h: randInt(2, H_MAX), until: 0, holdMs: 0 };
 }
 
 const poseTracker = new PoseTracker();
@@ -209,14 +198,12 @@ async function init() {
 
   await showRuleCard({
     unit: UNIT,
-    title: "우주 화물 수송대",
+    title: "몸으로 원기둥 만들기",
     lines: [
-      "화물 세 개에 <b>반지름</b>과 <b>높이</b>가 적혀 있어요. 부피를 계산해 보세요!",
-      mode === "motion"
-        ? "맞는 화물 <b>앞으로 걸어가</b> 서고, <b>앉았다 일어서서</b> 들어 올려요."
-        : "맞는 화물을 <b>표시된 횟수만큼 누르면</b> 들려요.",
-      "<b>무거운 화물은 두 번</b> 들어야 해요. 위에 몇 번인지 나와요!",
-      "<b>5연속 성공하면 특대 화물 보너스!</b> 그때는 <b>양팔을 벌려 몸으로</b> 만들어요.",
+      "<b>양팔을 벌린 너비 = 반지름</b>, <b>앉은 키 = 높이</b>예요!",
+      "<b>3.14는 곱하지 않아도 돼요.</b> 부피가 20×3.14면 반지름 2일 때 <b>4 × ? = 20</b>!",
+      "<b>🔒 가 붙은 값은 고정</b>이에요. 나머지 하나만 몸으로 맞추면 돼요.",
+      "맞는 값에서 <b>잠깐만 멈추면</b> 성공! <b>5연속이면 보너스</b>가 나와요.",
     ],
   });
 
@@ -232,11 +219,12 @@ const holdFill = document.getElementById("holdFill");
 const startGate = new StartGate(mode, holdFill);
 
 let autoDiff, count, playEndAt;
-let round = null, cargos = [], roundAt, resolving = false;
-let bonus = null, curR = 5;
-let standIdx = -1;     // 지금 어느 화물 앞에 서 있는가
-let liftsDone = 0;     // 그 화물을 몇 번 들었는가
-let bursts = [];
+let round = null, roundAt, resolving = false;
+let bonus = null;
+let curR = 3, curH = 3;     // 지금 몸으로 만들고 있는 반지름·높이
+let holdMs = 0;
+let smoothArm = 1.6, smoothDepth = 0;
+let okFlash = 0;
 let confetti = [], sparks = [];
 const shake = new ScreenShake();
 let recorder, comboShot, fallbackShot, autoRec, recordedBlob = null;
@@ -244,12 +232,17 @@ const recIndicator = document.getElementById("recIndicator");
 let cursors = [];
 let lastFrameAt = 0;
 
-const NEXT_MS = 420;   // 다음 것이 거의 바로 온다 — 끊기면 리듬이 죽는다
-const FLOOR_Y = 0.70;  // 화물이 놓인 바닥
+const NEXT_MS = 500;
+const BASE_Y = 0.80;        // 원기둥이 서 있는 바닥
+const HOLD_MS = 340;        // 맞는 값에 이만큼 머물면 성공
 const BONUS_MS = 9000;
-const BONUS_HOLD = 500;
 
-// 연속 성공을 크게 알려 준다 — 잘하고 있다는 게 눈에 보여야 계속 몸을 쓴다
+// 양팔 너비 → 반지름 (어깨 너비의 몇 배인지로 재므로 카메라 거리와 무관)
+const ARM_MIN = 0.75, ARM_MAX = 2.70;
+// 앉은 깊이 → 높이. 서 있으면 가장 높고, 깊이 앉으면 가장 낮다 — 몸이 곧 원기둥이다.
+const SQUAT_DEEP = 0.45;    // 어깨가 어깨 너비의 45%만큼 내려가면 가장 낮은 칸
+
+// 연속 성공을 크게 알려 준다
 let streakMsg = null;
 function noteStreak(n) {
   if (n >= 3) streakMsg = { text: n >= 10 ? `🔥 ${n}연속 대단해요!` : n >= 5 ? `⚡ ${n}연속!` : `${n}연속!`, until: performance.now() + 1000 };
@@ -260,97 +253,110 @@ function drawStreak(ctx) {
   const fs = fluidPx(dims, 30, { min: 21, max: 42 });
   const puls = 1 + Math.sin(performance.now() / 110) * 0.09;
   ctx.save();
-  ctx.translate(w * 0.5, h * 0.47); ctx.scale(puls, puls);
+  ctx.translate(w * 0.5, h * 0.44); ctx.scale(puls, puls);
   drawChunkyText(ctx, streakMsg.text, 0, 0, fs, PARTY.gold,
     { outline: CUTE.ink, outlineWidth: Math.max(4, fs * 0.22) });
   ctx.restore();
 }
 
-// ── 도움 표시 ── 두 번 연속 틀리면 다음 문제의 정답을 반짝여 알려 준다.
-// 계속 틀리기만 하면 아이는 포기한다. "한 번은 맞혀 보는 경험"이 있어야 다음을 시도한다.
 let missStreak = 0;
 function helpOn() { return missStreak >= 2; }
-function drawHelpRing(ctx, x, y, r) {
-  if (!helpOn()) return;
-  const t = (performance.now() % 800) / 800;
-  ctx.save();
-  ctx.globalAlpha = 0.9 * (1 - t * 0.5);
-  ctx.strokeStyle = PARTY.gold;
-  ctx.lineWidth = Math.max(4, r * 0.22);
-  ctx.beginPath();
-  ctx.arc(x, y, r * (1.15 + t * 0.35), 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.restore();
-}
 
 function isSpurt() { return playEndAt - performance.now() < 10000; }
 function roundMs() {
-  return autoDiff.level === 1 ? 15000 : autoDiff.level === 2 ? 13000 : 11000;
+  return autoDiff.level === 1 ? 12000 : autoDiff.level === 2 ? 10500 : 9000;
 }
 
-// ---------------------------------------------------------------------------
-// 들어 올리기 — 예전에는 "화물에 손을 대면 실린다"였다. 마우스로 하는 것과 똑같아서
-// 카메라를 켤 이유가 없었다. 이제 <앉았다 일어서기>로 든다.
-//
-// 앉기 깊이는 어깨 높이로 잰다. 무릎·발목은 교실 카메라 화각에서 자주 잘려 나가지만
-// 어깨는 거의 항상 보인다. 서 있을 때의 어깨 높이를 기준선으로 잡고, 그보다
-// 얼마나 내려갔는지를 어깨 너비로 나눠 재면 카메라와의 거리에 상관없이 같은 기준이 된다.
-//
-// 서서 하기 어려운 학생을 위해 <두 팔을 머리 위로 번쩍 드는 동작>도 한 번으로 인정한다.
-// 의자에 앉아서도 참여할 수 있어야 한다.
-// ---------------------------------------------------------------------------
-const SQUAT_DOWN = 0.34;   // 어깨 너비의 34%만큼 내려가면 앉은 것
-const SQUAT_UP = 0.14;     // 다시 이만큼 올라오면 한 번 완료
-const lift = { standY: null, down: false, armsUp: false };
+// ── 몸 읽기 ──
+// 서 있을 때의 어깨 높이를 기준선으로 삼는다. 무릎·발목은 교실 화각에서 자주 잘리지만
+// 어깨는 거의 항상 보인다. 아이가 카메라에 다가서면 기준선이 천천히 따라간다.
+const stand = { y: null };
+function resetBody() { stand.y = null; smoothArm = 1.6; smoothDepth = 0; }
 
-function resetLift() { lift.standY = null; lift.down = false; lift.armsUp = false; }
-
-// 이번 프레임에 "한 번 들었는가"
-function liftedThisFrame(f) {
-  if (!f) return false;
-  // 서 있는 높이 — 가장 높았던 위치를 기준으로 삼되, 아이가 카메라에 다가오거나
-  // 물러서면 아주 천천히 따라가게 한다(급히 따라가면 앉은 자세가 기준이 돼 버린다)
-  if (lift.standY === null || f.sc.y < lift.standY) lift.standY = f.sc.y;
-  else lift.standY += (f.sc.y - lift.standY) * 0.0012;
-
-  let done = false;
-  const depth = (f.sc.y - lift.standY) / f.unit;
-  if (!lift.down) { if (depth > SQUAT_DOWN) lift.down = true; }
-  else if (depth < SQUAT_UP) { lift.down = false; done = true; }
-
-  // 두 팔을 함께 머리 위로 — 한 손만 드는 건 겨냥이나 인사이므로 세지 않는다
-  const bothOverhead = f.lw.y < f.sc.y - f.unit * 0.45 && f.rw.y < f.sc.y - f.unit * 0.45;
-  if (bothOverhead && !lift.armsUp) { lift.armsUp = true; done = true; }
-  else if (!bothOverhead && f.lw.y > f.sc.y && f.rw.y > f.sc.y) lift.armsUp = false;
-
-  return done;
+function readBody(dt) {
+  if (mode === "motion") {
+    const f = motion.last;
+    if (!f) return;
+    const units = Math.hypot(f.rw.x - f.lw.x, f.rw.y - f.lw.y) / f.unit;
+    smoothArm += (units - smoothArm) * Math.min(1, dt * 9);
+    if (stand.y === null || f.sc.y < stand.y) stand.y = f.sc.y;
+    else stand.y += (f.sc.y - stand.y) * 0.0012;
+    const depth = (f.sc.y - stand.y) / f.unit;
+    smoothDepth += (depth - smoothDepth) * Math.min(1, dt * 9);
+    curR = snap(lerpMap(smoothArm, ARM_MIN, ARM_MAX, R_MIN, R_MAX), R_MIN, R_MAX);
+    curH = snap(lerpMap(smoothDepth, SQUAT_DEEP, 0, H_MIN, H_MAX), H_MIN, H_MAX);
+  } else if (cursors[0]) {
+    curR = snap(lerpMap(cursors[0].x, dims.w * 0.12, dims.w * 0.88, R_MIN, R_MAX), R_MIN, R_MAX);
+    curH = snap(lerpMap(cursors[0].y, dims.h * 0.86, dims.h * 0.22, H_MIN, H_MAX), H_MIN, H_MAX);
+  }
+  // 고정된 값은 몸으로 바꾸지 않는다 — 한 번에 한 축만 맞추게 해야 시간 안에 된다
+  if (!bonus && round) {
+    if (round.lock === "r") curR = round.r;
+    if (round.lock === "h") curH = round.h;
+  }
 }
-
-// 요구 부피가 클수록 무겁다 — 수학 값이 그대로 운동량이 된다
-function liftsNeeded(v) { return v >= 200 ? 2 : 1; }
 
 function newRound() {
   round = genRound(autoDiff.level);
   round.ms = roundMs();
-  round.need = liftsNeeded(round.target);
-  // 화물은 바닥에 나란히 놓인다 — 흘러가지 않는다.
-  // 고르는 것은 <어느 화물 앞에 서는가>이고, 확정은 <들어 올리기>다.
-  cargos = round.cargos.map((c, i) => ({
-    ...c, x: dims.w * (0.22 + i * 0.28), y: dims.h * FLOOR_Y, taken: false,
-  }));
-  bursts = [];
-  standIdx = -1; liftsDone = 0;
+  holdMs = 0;
   resolving = false;
   motion.reset();
-  resetLift();
   roundAt = performance.now();
+}
+
+function succeed() {
+  resolving = true;
+  count++;
+  const { w, h } = dims;
+  const cx = w * 0.5, cy = h * 0.55;
+  party.correct(cx, cy, { base: 13 * (isSpurt() ? 2 : 1), elapsedMs: performance.now() - roundAt });
+  if (party.combo > 0 && party.combo === party.maxCombo) comboShot.capture(canvas);
+  autoDiff.reportCorrect();
+  missStreak = 0;
+  noteStreak(party.combo);
+  autoRec.trigger();
+  shake.trigger(10, 220);
+  if (!isMuted()) sound.hit("perfect");
+  spawnSparkles(sparks, cx, cy, 32, ["#fff", PARTY.gold, CUTE.cyan]);
+  okFlash = performance.now() + 900;
+  if (party.combo > 0 && party.combo % 5 === 0) {
+    spawnConfetti(confetti, cx, cy, 44);
+    setTimeout(() => { if (state === "playing") startBonus(); }, NEXT_MS);
+    return;
+  }
+  setTimeout(() => { if (state === "playing") newRound(); }, NEXT_MS);
+}
+
+function timeUp() {
+  if (resolving) return;
+  resolving = true;
+  const want = round.lock === "r" ? `높이 ${round.h}` : `반지름 ${round.r}`;
+  party.wrong(dims.w * 0.5, dims.h * 0.45, `정답은 ${want}`);
+  autoDiff.reportWrong();
+  missStreak++;
+  if (!isMuted()) sound.wrong();
+  setTimeout(() => { if (state === "playing") newRound(); }, NEXT_MS);
 }
 
 function startBonus() {
   bonus = genBonus();
   bonus.until = performance.now() + BONUS_MS;
-  curR = 5;
+  holdMs = 0;
   if (!isMuted()) sound.fever();
+}
+
+function endBonus(ok) {
+  bonus = null;
+  if (ok) {
+    count += 2;
+    party.correct(dims.w * 0.5, dims.h * 0.5, { base: 40, elapsedMs: 1000 });
+    spawnConfetti(confetti, dims.w * 0.5, dims.h * 0.5, 60);
+    if (!isMuted()) sound.success();
+  } else {
+    party.judge(dims.w * 0.5, dims.h * 0.5, "아쉬워요!", CUTE.blue);
+  }
+  setTimeout(() => { if (state === "playing") newRound(); }, NEXT_MS);
 }
 
 function startCountdown() {
@@ -384,6 +390,7 @@ function beginPlay() {
   bonus = null;
   playEndAt = performance.now() + 60000;
   lastFrameAt = 0;
+  resetBody();
   newRound();
 
   recorder = new ClipRecorder(canvas, sound, 24);
@@ -399,63 +406,6 @@ function beginPlay() {
     onDone: (blob) => { recordedBlob = blob; },
     fallbackMs: 8000,
   });
-}
-
-function takeCargo(c) {
-  if (resolving || c.taken) return;
-  c.taken = true;
-  resolving = true;
-  bursts.push({ x: c.x, y: c.y, at: performance.now(), ok: c.ok });
-  shake.trigger(c.ok ? 10 : 6, 190);
-  if (c.ok) {
-    count++;
-    // 두 번 들어야 하는 화물은 그만큼 보상이 크다
-    party.correct(c.x, c.y, { base: (round.need > 1 ? 16 : 11) * (isSpurt() ? 2 : 1), elapsedMs: performance.now() - roundAt });
-    if (party.combo > 0 && party.combo === party.maxCombo) comboShot.capture(canvas);
-    autoDiff.reportCorrect();
-    missStreak = 0;
-    noteStreak(party.combo);
-    autoRec.trigger();
-    if (!isMuted()) sound.hit("perfect");
-    spawnSparkles(sparks, c.x, c.y, 30, ["#fff", PARTY.gold, CUTE.cyan]);
-    // 5연속마다 특대 화물 보너스 — 이 종목만의 "몸으로 만들기"를 여기서만 쓴다
-    if (party.combo > 0 && party.combo % 5 === 0) {
-      spawnConfetti(confetti, c.x, c.y, 44);
-      setTimeout(() => { if (state === "playing") startBonus(); }, NEXT_MS);
-      return;
-    }
-  } else {
-    party.wrong(c.x, c.y, `정답은 ${round.target} ${round.unitText}`);
-    autoDiff.reportWrong();
-    missStreak++;
-    if (!isMuted()) sound.wrong();
-  }
-  setTimeout(() => { if (state === "playing") newRound(); }, NEXT_MS);
-}
-
-// 화물은 흘러가 사라지지 않는다. 대신 문제마다 제한 시간이 있다.
-function missAll() {
-  resolving = true;
-  party.wrong(dims.w * 0.5, dims.h * 0.5, "시간 초과!");
-  autoDiff.reportWrong();
-  missStreak++;
-  if (!isMuted()) sound.wrong();
-  setTimeout(() => { if (state === "playing") newRound(); }, NEXT_MS);
-}
-
-function endBonus(ok) {
-  if (ok) {
-    count += 2;
-    party.correct(dims.w * 0.5, dims.h * 0.55, { base: 40, elapsedMs: 1000 });
-    spawnConfetti(confetti, dims.w * 0.5, dims.h * 0.5, 70);
-    shake.trigger(14, 300);
-    if (!isMuted()) sound.success();
-  } else {
-    party.wrong(dims.w * 0.5, dims.h * 0.55, "아쉬워요!");
-    if (!isMuted()) sound.wrong();
-  }
-  bonus = null;
-  setTimeout(() => { if (state === "playing") newRound(); }, NEXT_MS);
 }
 
 function endGame() {
@@ -481,10 +431,10 @@ function endGame() {
   }
   document.getElementById("savePhotoBtn").onclick = async () => {
     const blob = await shot.toBlob((c, w, h) => drawPhotoOverlay(c, w, h, { title: TITLE, record: count + RECORD_SUFFIX, medal }));
-    downloadBlob(blob, `수학체육올림픽6_우주화물수송대_${formatFileTimestamp()}.png`);
+    downloadBlob(blob, `수학체육올림픽6_원기둥만들기_${formatFileTimestamp()}.png`);
   };
   document.getElementById("saveVideoBtn").onclick = () => {
-    if (recordedBlob) downloadBlob(recordedBlob, `수학체육올림픽6_우주화물수송대_${formatFileTimestamp()}.${recorder.extension}`);
+    if (recordedBlob) downloadBlob(recordedBlob, `수학체육올림픽6_원기둥만들기_${formatFileTimestamp()}.${recorder.extension}`);
   };
   document.getElementById("resultPanel").style.display = "flex";
   if (!isMuted()) sound.success();
@@ -511,53 +461,14 @@ function goReady() {
   }, 500);
 }
 
-// ── 지금 어느 화물 앞에 서 있는가 ──
-// 모션에서는 <몸(어깨 중심)의 좌우 위치>다. 손을 뻗는 게 아니라 걸어가서 서야 한다.
-function bodyX() {
-  if (mode === "motion") {
-    const f = motion.last;
-    return f ? f.sc.x : null;
-  }
-  return cursors[0] ? cursors[0].x : null;
-}
-
-function nearestCargo(x) {
-  if (x === null) return -1;
-  let best = -1, bd = Infinity;
-  for (let i = 0; i < cargos.length; i++) {
-    const d = Math.abs(x - cargos[i].x);
-    if (d < bd) { bd = d; best = i; }
-  }
-  // 화물 사이 간격의 절반보다 멀면 아무 데도 서 있지 않은 것으로 본다
-  return bd <= dims.w * 0.15 ? best : -1;
-}
-
-function stepLifting() {
-  if (resolving || bonus) return;
-  const idx = nearestCargo(bodyX());
-  // 다른 화물로 옮기면 지금까지 든 횟수는 사라진다 — 한 자리에서 끝까지 들어야 한다
-  if (idx !== standIdx) { standIdx = idx; liftsDone = 0; }
-  if (idx < 0) return;
-
-  let did = false;
-  if (mode === "motion") did = liftedThisFrame(motion.last);
-  else if (pointerInput && pointerInput.consumeJustDown()) did = true;
-  if (!did) return;
-
-  liftsDone++;
-  if (!isMuted()) sound.pop();
-  shake.trigger(5, 130);
-  if (liftsDone >= round.need) takeCargo(cargos[idx]);
-}
-
 // ── 화물 그림 ──
-function drawCargoShape(ctx, kind, cx, cy, rr, hh) {
+function drawCargoShape(ctx, kind, cx, cy, rr, hh, fill = CUTE.cyan) {
   const ey = rr * 0.34;
   ctx.save();
   ctx.lineWidth = Math.max(2.5, rr * 0.16);
   ctx.strokeStyle = CUTE.ink;
   ctx.lineJoin = "round";
-  ctx.fillStyle = CUTE.cyan;
+  ctx.fillStyle = fill;
   if (kind === "sphere") {
     ctx.beginPath(); ctx.arc(cx, cy - rr, rr, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     ctx.beginPath(); ctx.ellipse(cx, cy - rr, rr, ey, 0, 0, Math.PI * 2);
@@ -581,7 +492,7 @@ function drawCargoShape(ctx, kind, cx, cy, rr, hh) {
 
 function drawFloor(ctx) {
   const { w, h } = dims;
-  const y = h * FLOOR_Y;
+  const y = h * BASE_Y;
   ctx.save();
   ctx.fillStyle = "rgba(255,255,255,0.16)";
   ctx.fillRect(0, y, w, h - y);
@@ -591,128 +502,105 @@ function drawFloor(ctx) {
   ctx.restore();
 }
 
-function drawCargos(ctx, now) {
+// 화면에서 1칸이 몇 px 인가 — 반지름 6·높이 6 이 화면에 들어와야 한다
+function unitPx() { return Math.min(dims.w * 0.055, dims.h * 0.070); }
+
+// 내가 몸으로 만들고 있는 원기둥(또는 원뿔)
+function drawMySolid(ctx, now) {
   const { w, h } = dims;
-  const unit = Math.min(w * 0.013, h * 0.0105);
-  for (let i = 0; i < cargos.length; i++) {
-    const c = cargos[i];
-    if (c.taken) continue;
-    const here = i === standIdx;
-    const rr = Math.max(unit * 3, c.r * unit * 1.6);
-    const hh = Math.max(unit * 5, c.h * unit * 1.9);
-    // 지금 서 있는 화물은 살짝 떠오른다 — 어디에 서 있는지가 한눈에 보여야 한다
-    const lifted = here ? Math.min(liftsDone, round.need) / round.need * h * 0.05 : 0;
-    if (here) {
-      ctx.save();
-      ctx.fillStyle = "rgba(255,214,102,0.28)";
-      ctx.beginPath();
-      ctx.ellipse(c.x, c.y, rr * 2.1, rr * 0.52, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    }
-    if (c.ok) drawHelpRing(ctx, c.x, c.y - hh * 0.4 - lifted, Math.max(rr, hh * 0.5));
-    drawCargoShape(ctx, c.kind, c.x, c.y - lifted, rr, hh);
+  const px = unitPx();
+  const cx = w * 0.5, baseY = h * BASE_Y;
+  const kind = bonus ? "cyl" : round.kind;
+  const okR = bonus ? curR === bonus.r : curR === round.r;
+  const okH = bonus ? curH === bonus.h : curH === round.h;
+  const done = okR && okH;
 
-    const fs = fluidPx(dims, 18, { min: 13, max: 25 });
-    const label = c.kind === "sphere" ? `반지름 ${c.r}` : `반지름 ${c.r}  높이 ${c.h}`;
-    drawStickerRect(ctx, c.x, c.y + fs * 1.9, fs * (c.kind === "sphere" ? 3.6 : 6.2), fs * 1.7, fs * 0.45,
-      here ? PARTY.gold : CUTE.cream, { lineWidth: Math.max(2.5, fs * 0.14), drop: fs * 0.16 });
-    drawChunkyText(ctx, label, c.x, c.y + fs * 1.9, fs, CUTE.ink, { outline: "#fff", outlineWidth: Math.max(2, fs * 0.14) });
+  drawCargoShape(ctx, kind, cx, baseY, curR * px, curH * px, done ? CUTE.green : CUTE.cyan);
 
-    // 이 화물을 몇 번 들었는지 — 남은 횟수가 보여야 "한 번 더!"가 된다
-    if (here && round.need > 1) {
-      const dots = [];
-      for (let k = 0; k < round.need; k++) dots.push(k < liftsDone);
-      const dr = fs * 0.42, gap = dr * 2.6;
-      const x0 = c.x - (gap * (round.need - 1)) / 2;
-      for (let k = 0; k < dots.length; k++) {
-        drawSticker(ctx, x0 + gap * k, c.y + fs * 3.4, dr, dots[k] ? CUTE.green : "rgba(255,255,255,0.55)",
-          { lineWidth: Math.max(2, dr * 0.24) });
-      }
-    }
+  // 반지름·높이 눈금 값 — 숫자는 이 둘만 보여 준다.
+  // 부피를 실시간으로 계산해 띄우면 아이는 숫자가 같아질 때까지 움직이기만 하면 되고,
+  // 수학은 하나도 하지 않게 된다.
+  const fs = fluidPx(dims, 19, { min: 14, max: 26 });
+  const rLock = !bonus && round.lock === "r";
+  const hLock = !bonus && round.lock === "h";
+  // 반지름 — 밑면 옆에
+  drawStickerRect(ctx, cx, baseY + fs * 1.8, fs * 7.4, fs * 1.7, fs * 0.45,
+    rLock ? "rgba(255,255,255,0.75)" : okR ? CUTE.green : CUTE.cream,
+    { lineWidth: Math.max(2.5, fs * 0.14), drop: fs * 0.16 });
+  drawChunkyText(ctx, `${rLock ? "🔒 " : ""}반지름 ${curR}`, cx, baseY + fs * 1.8, fs,
+    okR && !rLock ? "#fff" : CUTE.ink, { outline: okR && !rLock ? CUTE.ink : "#fff", outlineWidth: Math.max(2, fs * 0.13) });
+  // 높이 — 기둥 옆에
+  const hy = baseY - curH * px * 0.5;
+  drawStickerRect(ctx, cx + curR * px + fs * 3.2, hy, fs * 6.0, fs * 1.7, fs * 0.45,
+    hLock ? "rgba(255,255,255,0.75)" : okH ? CUTE.green : CUTE.cream,
+    { lineWidth: Math.max(2.5, fs * 0.14), drop: fs * 0.16 });
+  drawChunkyText(ctx, `${hLock ? "🔒 " : ""}높이 ${curH}`, cx + curR * px + fs * 3.2, hy, fs,
+    okH && !hLock ? "#fff" : CUTE.ink, { outline: okH && !hLock ? CUTE.ink : "#fff", outlineWidth: Math.max(2, fs * 0.13) });
+
+  // 다 맞은 동안 차오르는 고리
+  if (done && holdMs > 0) {
+    ctx.save();
+    ctx.strokeStyle = PARTY.gold;
+    ctx.lineWidth = fluidPx(dims, 9, { min: 6, max: 14 });
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.arc(cx, baseY - curH * px * 0.5, Math.max(curR * px, curH * px * 0.6) + fluidPx(dims, 14, { min: 10, max: 20 }),
+      -Math.PI / 2, -Math.PI / 2 + (holdMs / HOLD_MS) * Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   }
 
-  // 서 있는 자리 표시 — 아직 아무 화물 앞에도 없으면 안내한다
-  const bx = bodyX();
-  if (bx !== null) {
-    const py = h * FLOOR_Y;
-    const pr = fluidPx(dims, 15, { min: 11, max: 21 });
+  // 두 번 연속 틀리면 만들어야 할 값을 알려 준다
+  if (!bonus && helpOn() && !resolving) {
+    const want = round.lock === "r" ? `높이 ${round.h}` : `반지름 ${round.r}`;
+    const gfs = fluidPx(dims, 18, { min: 13, max: 24 });
+    const t = (now % 800) / 800;
     ctx.save();
-    ctx.strokeStyle = standIdx >= 0 ? PARTY.gold : "rgba(255,255,255,0.75)";
-    ctx.lineWidth = Math.max(3, pr * 0.28);
-    ctx.beginPath(); ctx.moveTo(bx, py - pr * 1.2); ctx.lineTo(bx, py + pr * 1.6); ctx.stroke();
-    ctx.beginPath(); ctx.ellipse(bx, py + pr * 1.6, pr * 1.1, pr * 0.38, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 0.9 * (1 - t * 0.5);
+    drawChunkyText(ctx, `👉 ${want} 로 만들어요`, cx, baseY - curH * px - gfs * 2.4, gfs, PARTY.gold,
+      { outline: CUTE.ink, outlineWidth: Math.max(3, gfs * 0.22) });
     ctx.restore();
-    drawChunkyText(ctx, standIdx >= 0 ? "🏋️" : "👣", bx, py - pr * 2.2, pr * 1.5, "#fff",
-      { outline: CUTE.ink, outlineWidth: Math.max(3, pr * 0.3) });
   }
 
-  bursts = bursts.filter((b) => now - b.at < 420);
-  for (const b of bursts) {
-    const t = (now - b.at) / 420;
-    ctx.save();
-    ctx.globalAlpha = 1 - t;
-    ctx.strokeStyle = b.ok ? PARTY.gold : CUTE.red;
-    ctx.lineWidth = Math.max(4, w * 0.02 * (1 - t));
-    ctx.beginPath(); ctx.arc(b.x, b.y, w * 0.06 * (0.8 + t * 1.8), 0, Math.PI * 2); ctx.stroke();
-    ctx.restore();
+  // 성공 직후에만 식을 보여 준다
+  if (!bonus && now < okFlash) {
+    const efs = fluidPx(dims, 21, { min: 15, max: 29 });
+    drawChunkyText(ctx, `✓ ${round.show}`, cx, baseY - curH * px - efs * 1.4, efs, PARTY.gold,
+      { outline: CUTE.ink, outlineWidth: Math.max(3, efs * 0.22) });
   }
 }
 
-// ── 보너스 라운드: 몸으로 원기둥 만들기 ──
+// ── 보너스 라운드 — 계산 없이 두 값을 동시에 몸으로 만든다 ──
 function stepBonus(ctx, dt, now) {
   const { w, h } = dims;
   const remain = bonus.until - now;
   if (remain <= 0) { endBonus(false); return; }
 
-  // 반지름만 몸으로 만든다 (높이는 고정) — 두 값을 동시에 더듬으면 시간 안에 못 맞춘다
-  if (mode === "motion") {
-    const f = motion.last;
-    if (f) {
-      const armUnits = Math.abs(f.rw.x - f.lw.x) / f.unit;
-      curR = snap(lerpMap(armUnits, ARM_MIN, ARM_MAX, R_MIN, R_MAX), R_MIN, R_MAX);
-    }
-  } else if (cursors[0]) {
-    curR = snap(lerpMap(cursors[0].x, w * 0.12, w * 0.88, R_MIN, R_MAX), R_MIN, R_MAX);
-  }
-  const nowV = volCyl(curR, bonus.h);
-  const ok = Math.abs(nowV - bonus.target) / bonus.target <= 0.04;
-  bonus.holdMs = ok ? bonus.holdMs + dt * 1000 : Math.max(0, bonus.holdMs - dt * 900);
-  if (bonus.holdMs >= BONUS_HOLD) { endBonus(true); return; }
+  readBody(dt);
+  const done = curR === bonus.r && curH === bonus.h;
+  holdMs = done ? holdMs + dt * 1000 : Math.max(0, holdMs - dt * 1400);
+  if (holdMs >= HOLD_MS) { endBonus(true); return; }
 
-  // 화면
-  const cx = w * 0.5, baseY = h * 0.78;
-  const px = Math.min(w * 0.020, h * 0.016);
-  drawCargoShape(ctx, "cyl", cx, baseY, curR * px, bonus.h * px);
-  const fs = fluidPx(dims, 26, { min: 18, max: 36 });
-  drawStickerRect(ctx, cx, h * 0.34, Math.min(w * 0.86, fs * 17), fs * 3.4, fs * 0.6,
-    ok ? CUTE.green : CUTE.cream, { lineWidth: Math.max(3, fs * 0.16), drop: fs * 0.2 });
-  drawChunkyText(ctx, `특대 화물  ${bonus.target} cm³ (높이 ${bonus.h} 고정 🔒)`, cx, h * 0.34 - fs * 0.72,
-    fs * 0.66, CUTE.ink, { outline: "#fff", outlineWidth: Math.max(2, fs * 0.12) });
-  drawChunkyText(ctx, `지금  반지름 ${curR} → ${nowV} cm³`, cx, h * 0.34 + fs * 0.78, fs,
-    ok ? "#fff" : CUTE.ink, { outline: ok ? CUTE.ink : "#fff", outlineWidth: Math.max(3, fs * 0.2) });
+  drawFloor(ctx);
+  drawMySolid(ctx, now);
 
-  const bw = w * 0.6, bh = fluidPx(dims, 11, { min: 8, max: 15 });
-  const by = h * 0.46;
-  drawStickerRect(ctx, cx, by, bw, bh, bh / 2, "rgba(255,255,255,0.85)", { lineWidth: 2, drop: 0 });
+  const tfs = fluidPx(dims, 28, { min: 20, max: 39 });
+  const puls = 1 + Math.sin(now / 110) * 0.09;
+  ctx.save();
+  ctx.translate(w * 0.5, h * 0.22); ctx.scale(puls, puls);
+  drawChunkyText(ctx, `🔥 보너스! 반지름 ${bonus.r} · 높이 ${bonus.h}`, 0, 0, tfs, PARTY.gold,
+    { outline: CUTE.ink, outlineWidth: Math.max(4, tfs * 0.22) });
+  ctx.restore();
+
+  const bw = w * 0.5, bh = fluidPx(dims, 11, { min: 8, max: 15 });
+  const by = h * 0.30;
+  drawStickerRect(ctx, w * 0.5, by, bw, bh, bh / 2, "rgba(255,255,255,0.85)", { lineWidth: 2, drop: 0 });
   ctx.save();
   ctx.fillStyle = CUTE.red;
   ctx.beginPath();
-  ctx.roundRect(cx - bw / 2, by - bh / 2, Math.max(bh, bw * (remain / BONUS_MS)), bh, bh / 2);
+  ctx.roundRect(w * 0.5 - bw / 2, by - bh / 2, Math.max(bh, bw * (remain / BONUS_MS)), bh, bh / 2);
   ctx.fill();
   ctx.restore();
-
-  const tfs = fluidPx(dims, 30, { min: 21, max: 42 });
-  const puls = 1 + Math.sin(now / 110) * 0.09;
-  ctx.save();
-  ctx.translate(cx, h * 0.24); ctx.scale(puls, puls);
-  drawChunkyText(ctx, "🔥 특대 화물 보너스!", 0, 0, tfs, PARTY.gold,
-    { outline: CUTE.ink, outlineWidth: Math.max(4, tfs * 0.22) });
-  ctx.restore();
-  drawChunkyText(ctx,
-    mode === "motion" ? "양팔을 벌려 반지름을 맞춰요!" : "좌우로 움직여 반지름을 맞춰요!",
-    cx, h * 0.94, fluidPx(dims, 17, { min: 13, max: 23 }), "#fff",
-    { outline: CUTE.ink, outlineWidth: fluidPx(dims, 5, { min: 3.5, max: 7 }) });
 }
 
 function loop(tsMs) {
@@ -746,15 +634,14 @@ function loop(tsMs) {
       for (const k of ["lw", "rw"]) {
         drawSticker(ctx, f[k].x, f[k].y, r, PARTY.gold, { lineWidth: Math.max(3, r * 0.15) });
       }
-      if (bonus) {
-        ctx.save();
-        ctx.strokeStyle = PARTY.gold; ctx.globalAlpha = 0.6;
-        ctx.lineWidth = Math.max(3, r * 0.3); ctx.setLineDash([r * 0.7, r * 0.6]);
-        ctx.beginPath(); ctx.moveTo(f.lw.x, f.lw.y); ctx.lineTo(f.rw.x, f.rw.y); ctx.stroke();
-        ctx.restore();
-      }
+      // 두 손을 잇는 선 — 이 길이가 곧 반지름이다
+      ctx.save();
+      ctx.strokeStyle = PARTY.gold; ctx.globalAlpha = 0.6;
+      ctx.lineWidth = Math.max(3, r * 0.3); ctx.setLineDash([r * 0.7, r * 0.6]);
+      ctx.beginPath(); ctx.moveTo(f.lw.x, f.lw.y); ctx.lineTo(f.rw.x, f.rw.y); ctx.stroke();
+      ctx.restore();
     } else if (state === "playing") {
-      drawChunkyText(ctx, "카메라에 두 손이 보이게 서 주세요!", w * 0.5, h * 0.95,
+      drawChunkyText(ctx, "카메라에 온몸이 보이게 2~3걸음 물러서 주세요!", w * 0.5, h * 0.95,
         fluidPx(dims, 20, { min: 15, max: 27 }), "#fff",
         { outline: CUTE.ink, outlineWidth: fluidPx(dims, 6, { min: 4, max: 8 }) });
     }
@@ -777,15 +664,25 @@ function stepGame() {
   if (bonus) {
     stepBonus(ctx, dt, now);
   } else {
+    if (!resolving) {
+      readBody(dt);
+      // 두 값이 다 맞은 채로 잠깐 머물면 성공
+      if (curR === round.r && curH === round.h) {
+        holdMs += dt * 1000;
+        if (holdMs >= HOLD_MS) succeed();
+      } else {
+        holdMs = Math.max(0, holdMs - dt * 1400);
+      }
+    }
+
     drawFloor(ctx);
-    drawCargos(ctx, now);
-    stepLifting();
+    drawMySolid(ctx, now);
 
     // 이 문제에 남은 시간 띠
     if (!resolving) {
       const t = Math.max(0, 1 - (now - roundAt) / round.ms);
       const bw = w * 0.44, bh = fluidPx(dims, 9, { min: 6, max: 13 });
-      const by = h * 0.44;
+      const by = h * 0.315;
       drawStickerRect(ctx, w * 0.5, by, bw, bh, bh / 2, "rgba(255,255,255,0.8)", { lineWidth: 2, drop: 0 });
       ctx.save();
       ctx.fillStyle = t < 0.3 ? CUTE.red : PARTY.gold;
@@ -793,30 +690,27 @@ function stepGame() {
       ctx.roundRect(w * 0.5 - bw / 2, by - bh / 2, Math.max(bh, bw * t), bh, bh / 2);
       ctx.fill();
       ctx.restore();
-      if (t <= 0) missAll();
+      if (t <= 0) timeUp();
     }
 
     drawCuteBanner(ctx, dims, [
-      { text: `${round.metric === "S" ? "필요한 겉넓이" : "필요한 부피"}  ${round.target} ${round.unitText}`
-              + (round.need > 1 ? "  🏋️ 두 번 들기!" : ""), size: 26, chunky: true, color: PARTY.gold },
-      { text: round.formula, size: 14, color: CUTE.ink },
+      { text: round.ask, size: 23, chunky: true, color: PARTY.gold },
+      { text: `${round.sub} · ${round.hint}`, size: 14, color: CUTE.ink },
     ], fluidPx, { top: hudBottom });
 
     if (remain < 10000) {
-      const fs2 = fluidPx(dims, 22, { min: 16, max: 30 });
+      const fs2 = fluidPx(dims, 21, { min: 15, max: 29 });
       const puls = 1 + Math.sin(now / 120) * 0.08;
-      ctx.save(); ctx.translate(w * 0.5, h * 0.42); ctx.scale(puls, puls);
+      ctx.save(); ctx.translate(w * 0.5, h * 0.37); ctx.scale(puls, puls);
       drawChunkyText(ctx, "🔥 라스트 스퍼트! 코인 2배", 0, 0, fs2, CUTE.red,
         { outline: "#fff", outlineWidth: Math.max(4, fs2 * 0.24) });
       ctx.restore();
     }
     drawChunkyText(ctx,
-      mode === "motion" ? "맞는 화물 앞에 서서 앉았다 일어서요! 5연속이면 보너스"
-        : "맞는 화물을 눌러요! 5연속이면 보너스",
+      mode === "motion" ? "양팔 = 반지름 · 앉은 키 = 높이!" : "좌우 = 반지름 · 위아래 = 높이!",
       w * 0.5, h * 0.965, fluidPx(dims, 14, { min: 11, max: 19 }), "#fff",
       { outline: CUTE.ink, outlineWidth: fluidPx(dims, 5, { min: 3.5, max: 7 }) });
   }
-
 
   party.update(dt);
   confetti = updateConfetti(confetti, dt); drawConfetti(ctx, confetti);

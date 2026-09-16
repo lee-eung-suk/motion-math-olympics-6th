@@ -31,8 +31,8 @@ export const UNIT_THEME = {
   n2: { icon: "🎯", color: CUTE.blue },
   n3: { icon: "🧊", color: CUTE.green },
   n4: { icon: "🏐", color: CUTE.orange },
-  n5: { icon: "🏹", color: CUTE.purple },
-  n6: { icon: "🚀", color: CUTE.cyan },
+  n5: { icon: "⭕", color: CUTE.purple },
+  n6: { icon: "🛢️", color: CUTE.cyan },
 };
 
 // 표정 5종 — 캐릭터 아래에 작게 붙는 기분 뱃지

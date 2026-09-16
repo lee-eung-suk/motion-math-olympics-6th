@@ -182,9 +182,10 @@ const RO_PLAIN = [false, true, true, false, true, true, false, true, true, true]
 function ro(n) { return RO_PLAIN[n % 10] ? "로" : "으로"; }
 
 function genRound(level) {
-  // ⭐1은 전체를 12 이하로 묶는다 — 한 칸이 화면에서 충분히 크고, 암산으로 끝난다
-  const maxTotal = level === 1 ? 12 : 24;
-  const maxParts = level === 1 ? 4 : 7;
+  // ⭐1은 전체를 12 이하로 묶는다 — 한 칸이 화면에서 충분히 크고, 암산으로 끝난다.
+  // ⭐2·⭐3도 24는 너무 컸다. 18로 낮춘다.
+  const maxTotal = level === 1 ? 12 : 18;
+  const maxParts = level === 1 ? 4 : 6;
   const { a, b } = pickRatio(maxParts);
   const parts = a + b;
   const k = randInt(2, Math.max(2, Math.floor(maxTotal / parts)));
@@ -221,6 +222,9 @@ function genRound(level) {
   while (picks.length < 2) { const v = randInt(1, total - 1); if (!seen.has(v)) { seen.add(v); picks.push(v); } }
 
   return {
+    // ⭐1은 전체를 묶음 그림으로도 보여 준다 — 세면 답이 나오게.
+    // 기초학력 학생에게 "전체를 몇 칸으로 나눈다"는 말만으로는 그림이 안 그려진다.
+    dots: level === 1 ? { total, parts, each: total / parts, a, b } : null,
     text, hint, ans: { p: answer, q: 1 },
     cells: shuffle([{ f: { p: answer, q: 1 }, ok: true },
                     { f: { p: picks[0], q: 1 }, ok: false },
@@ -628,6 +632,41 @@ function drawCourt(ctx) {
     fluidPx(dims, 10, { min: 7, max: 14 }), 4, CUTE.cream, { lineWidth: 2, drop: 2 });
 }
 
+// ⭐1의 묶음 그림 — 전체 구슬을 (a+b)묶음으로 갈라 놓는다.
+// "12를 1:2로 나누면"이라는 말만으로는 기초학력 학생에게 아무 그림이 안 그려진다.
+// 묶음이 보이면 한 묶음을 세는 것만으로 답이 나온다.
+function drawDots(ctx, top) {
+  if (!round.dots) return;
+  const { w, h } = dims;
+  const d = round.dots;
+  const r = fluidPx(dims, 9, { min: 6, max: 13 });
+  const gapDot = r * 2.5, gapGroup = r * 2.6;
+  const rowW = d.total * gapDot + (d.parts - 1) * gapGroup;
+  let x = w * 0.5 - rowW / 2 + r;
+  const y = top + r * 2.4;
+  for (let g = 0; g < d.parts; g++) {
+    for (let i = 0; i < d.each; i++) {
+      drawSticker(ctx, x, y, r, g < d.a ? PARTY.gold : CUTE.cream, { lineWidth: Math.max(2, r * 0.26) });
+      x += gapDot;
+    }
+    if (g < d.parts - 1) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,255,255,0.85)";
+      ctx.lineWidth = Math.max(2, r * 0.3);
+      ctx.setLineDash([r * 0.5, r * 0.45]);
+      ctx.beginPath();
+      ctx.moveTo(x - gapDot + gapGroup / 2, y - r * 1.9);
+      ctx.lineTo(x - gapDot + gapGroup / 2, y + r * 1.9);
+      ctx.stroke();
+      ctx.restore();
+      x += gapGroup;
+    }
+  }
+  const fs = fluidPx(dims, 13, { min: 10, max: 18 });
+  drawChunkyText(ctx, `${d.parts}묶음으로 나눴어요 · 한 묶음 ${d.each}개`, w * 0.5, y + r * 3.0, fs, "#fff",
+    { outline: CUTE.ink, outlineWidth: Math.max(2.5, fs * 0.22) });
+}
+
 // 내 코트에 그은 세 칸 — 어디에 서면 어디로 가는지가 눈에 보여야 한다
 function drawMyZones(ctx) {
   const { w, h } = dims;
@@ -826,10 +865,11 @@ function stepGame() {
     CUTE.ink, { outline: "#fff", outlineWidth: Math.max(2, sfs * 0.12) });
 
   const hudBottom = party.drawHud(ctx, dims, { remainMs: remain, count, suffix: "점" });
-  drawCuteBanner(ctx, dims, [
+  const bannerBottom = drawCuteBanner(ctx, dims, [
     { text: round.text, size: 26, chunky: true, color: PARTY.gold },
     { text: round.hint, size: 14, color: CUTE.ink },
   ], fluidPx, { top: hudBottom });
+  drawDots(ctx, typeof bannerBottom === "number" ? bannerBottom : h * 0.26);
 
   if (bannerMsg && now < bannerMsg.until) {
     const fs = fluidPx(dims, 30, { min: 21, max: 42 });

@@ -160,13 +160,16 @@ function genRound(level) {
       ans = red(n, d * k);
       wrongs = [red(n, d), red(n * k, d), red(n, d + k)];
     } else {
-      // ⭐3 — 분수 ÷ 분수
+      // ⭐3 — 분수 ÷ 단위분수.
+      // 예전에는 (분수)÷(분수) 라 뒤집어 곱하는 <곱셈이 두 번> 필요했다.
+      // 셔틀콕이 날아오는 동안 할 수 있는 계산이 아니다. 나누는 쪽을 단위분수로
+      // 고정하면 "÷ 1/4 는 × 4" 한 걸음으로 끝나고, 배우는 개념은 그대로다.
       const b = randInt(2, 5), d = randInt(2, 5);
-      const a = randInt(1, b - 1), c = randInt(1, d - 1);
-      if (gcd(a, b) !== 1 || gcd(c, d) !== 1) continue;
-      text = `${a}/${b} ÷ ${c}/${d}`;
-      ans = red(a * d, b * c);
-      wrongs = [red(a * c, b * d), red(a, b), red(b * c, a * d)];
+      const a = randInt(1, b - 1);
+      if (gcd(a, b) !== 1) continue;
+      text = `${a}/${b} ÷ 1/${d}`;
+      ans = red(a * d, b);
+      wrongs = [red(a, b * d), red(a, b), red(b, a * d)];
     }
     const seen = new Set([fkey(ans)]);
     const picks = [];
@@ -180,7 +183,7 @@ function genRound(level) {
       cells: [{ f: ans, ok: true }, { f: picks[0], ok: false }, { f: picks[1], ok: false }],
       hint: level === 1 ? "자연수로 나누면 분모에 곱해요"
         : level === 2 ? "분자는 그대로, 분모에 곱해요"
-        : "÷ 를 × 로 바꾸고 뒤 분수를 뒤집어요",
+        : `÷ 1/☐ 는 × ☐ 와 같아요`,
     };
   }
   const ans = red(1, 4);
@@ -405,7 +408,7 @@ function hitByMe(smash) {
     spawnConfetti(confetti, x, y, smash ? 46 : 30);
     opp.mood = "sad";
     bannerMsg = { text: smash ? "💥 스매시 득점!" : "🏸 득점!", color: PARTY.gold, until: performance.now() + 1200 };
-    scheduleNext(true, 950);
+    scheduleNext(true, 1800);
   } else {
     // 아웃 셔틀콕을 쳤다 — 배드민턴에서 아웃을 받아치면 상대 점수다
     oppScore++;
@@ -417,7 +420,7 @@ function hitByMe(smash) {
     shake.trigger(7, 200);
     opp.mood = "happy";
     bannerMsg = { text: `정답은 ${fracText(round.ans.p, round.ans.q)}`, color: CUTE.red, until: performance.now() + 1400 };
-    scheduleNext(true, 1150);
+    scheduleNext(true, 2000);
   }
 }
 
@@ -444,7 +447,7 @@ function shuttleLanded() {
     shake.trigger(7, 200);
     opp.mood = "happy";
     bannerMsg = { text: "정답 셔틀콕을 놓쳤어요!", color: CUTE.red, until: performance.now() + 1300 };
-    scheduleNext(true, 1100);
+    scheduleNext(true, 2000);
   } else {
     // 아웃을 잘 흘려보냈다 — 벌점은 없지만 "잘 참았다"고 알려 준다.
     // 안 치는 것도 판단이므로, 아무 반응이 없으면 아이는 자기가 잘한 줄 모른다.

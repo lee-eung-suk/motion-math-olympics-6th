@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>원 넓이 양궁 · 종목 5</title>
+<title>원 키우기 · 종목 5</title>
 <link rel="stylesheet" href="../css/style.css?v=6">
 </head>
 <body>
@@ -18,16 +18,16 @@
   </div>
 
   <div class="overlay-panel" id="loadingPanel">
-    <h2>🏹 원 넓이 양궁</h2>
+    <h2>🏹 원 키우기</h2>
     <p id="loadingText">준비 중…</p>
   </div>
 
   <div class="overlay-panel" id="rulePanel" style="display:none">
     <div class="rule-card">
       <div class="rule-head">
-        <div class="rule-char">🏹</div>
+        <div class="rule-char">⭕</div>
         <div>
-          <h2 class="rule-title">원 넓이 양궁</h2>
+          <h2 class="rule-title">원 키우기</h2>
         </div>
       </div>
       <ul class="rule-list"></ul>
@@ -91,8 +91,8 @@ import {
 requestWakeLock();
 
 const UNIT = "n5";
-const TITLE = "원 넓이 양궁";
-const RECORD_SUFFIX = "발 명중";
+const TITLE = "원 키우기";
+const RECORD_SUFFIX = "개 성공";
 const MEDALS = { bronze: 3, silver: 6, gold: 9 };
 const mode = InputMode.get();
 const PI = 3.14;
@@ -104,7 +104,6 @@ let drifters = makeDrifters(10, dims.w, dims.h);
 window.addEventListener("resize", () => {
   dims = fitCanvasToScreen(canvas);
   drifters = makeDrifters(10, dims.w, dims.h);
-  if (round) layoutBalloons();
 });
 
 const sound = new SoundKit();
@@ -120,78 +119,57 @@ function randInt(min, max) { return min + Math.floor(Math.random() * (max - min 
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 function fmt(v) { return Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/\.?0+$/, ""); }
 
-function round2(v) { return +(+v).toFixed(2); }
-
 // ---------------------------------------------------------------------------
-// 문제 만들기 — 「원의 넓이」로 통일했다.
+// 문제 만들기 — 「몸으로 원을 만든다」
 //
-// 예전에는 화면 가운데에 5·10·15·20 동심원 <과녁>이 있고, 정답은 그 과녁이 아니라
-// 따로 떠다니는 풍선을 쏴서 골랐다. 표적이 두 개라 아이가 무엇을 맞혀야 하는지
-// 알 수 없었고, 과녁의 점수 링은 실제 점수와도 아무 상관이 없었다. 그래서 과녁을 없애고
-// <표적 자체를 원>으로 만들었다. 표적 원의 화면 크기는 √넓이에 비례한다 —
-// 넓이가 4배면 원이 정확히 2배 커지므로, 고른 답이 맞는지 눈으로도 가늠할 수 있다.
+// 예전에는 <반지름 4cm 원의 넓이는?> 을 묻고 답이 적힌 표적을 쏘게 했다.
+// 그런데 그 답은 4 × 4 × 3.14 = 50.24 다. 종이와 연필이 있어야 하는 계산을
+// 표적이 날아다니는 3초 안에 하라고 한 셈이다. 아무도 못 한다.
+//
+// 그래서 <3.14 를 아이가 곱하지 않게> 문제를 뒤집었다.
+//   "넓이가 16 × 3.14 인 원을 만들어라"  →  16 = 4 × 4  →  반지름 4
+// 아이가 하는 계산은 곱셈구구 한 번이고, 답은 <반지름이라는 길이>다.
+// 그 길이를 양팔을 벌려 만든다. 마우스 커서로는 만들 수 없는 값이다.
+//
+// 화면에는 반지름만 보여 준다. 넓이를 실시간으로 계산해 띄우면
+// 아이는 숫자가 같아질 때까지 팔만 움직이면 되고, 수학은 하나도 하지 않는다.
 // ---------------------------------------------------------------------------
+const R_MIN = 1, R_MAX = 7;
 
-// 오답 세 값 중 정답이 늘 가운데면 계산하지 않고 <가운데 고르기>로 이길 수 있다.
-// (넓이 r×r×3.14 는 원주 2×r×3.14 보다 크고 지름을 넣은 값보다 작아서, 예전엔 실제로
-//  r ≥ 3 인 모든 문제에서 정답이 가운데 값이었다.) 순위를 먼저 뽑아 골고루 나오게 한다.
-function pickWrongs(ans, cands) {
-  const uniq = [...new Set(cands.map(round2))].filter((v) => v > 0 && v !== ans && v < 2000);
-  const below = shuffle(uniq.filter((v) => v < ans));
-  const above = shuffle(uniq.filter((v) => v > ans));
-  for (const rank of shuffle([0, 1, 2])) {
-    if (rank === 0 && above.length >= 2) return [above[0], above[1]];
-    if (rank === 1 && below.length >= 1 && above.length >= 1) return [below[0], above[0]];
-    if (rank === 2 && below.length >= 2) return [below[0], below[1]];
-  }
-  const out = [...below, ...above].slice(0, 2);
-  while (out.length < 2) {
-    const v = round2(ans * (0.45 + Math.random() * 1.1));
-    if (v > 0 && v !== ans && !out.includes(v)) out.push(v);
-  }
-  return out;
-}
-
-function genQuiz(level) {
+function genRound(level) {
   if (level === 1) {
-    // ⭐1 — 반지름을 그대로 주고 공식에 넣기만 하면 된다
-    const r = randInt(2, 5);
-    const ans = round2(r * r * PI);
+    // ⭐1 — 넓이를 주고 반지름을 만든다 (☐ = 반지름 × 반지름)
+    const r = randInt(2, 6);
     return {
-      q: `반지름 ${r}cm 원의 「넓이」는?`,
-      sub: `${r} × ${r} × 3.14 = ?`,
-      formula: "넓이 = 반지름 × 반지름 × 3.14",
-      ans, unitText: "cm²",
-      // 반지름을 지름으로 착각 / 3.14 를 빠뜨림 / 원주 공식과 혼동 / 지름끼리 곱함
-      wrongs: pickWrongs(ans, [(2 * r) * (2 * r) * PI, r * r, 2 * r * PI, r * PI, (2 * r) * (2 * r)]),
+      ans: r,
+      ask: `넓이가 ${r * r} × 3.14 인 원을 만들어요!`,
+      hint: "넓이 = 반지름 × 반지름 × 3.14",
+      show: `${r} × ${r} × 3.14`,
     };
   }
   if (level === 2) {
-    // ⭐2 — 지름을 준다. 반으로 나눠 반지름을 만드는 한 걸음이 더 있다
-    const d = randInt(3, 6) * 2;
-    const r = d / 2;
-    const ans = round2(r * r * PI);
+    // ⭐2 — 원주를 주고 반지름을 만든다 (☐ = 지름)
+    const r = randInt(2, 7);
     return {
-      q: `지름 ${d}cm 원의 「넓이」는?`,
-      sub: `반지름은 ${r}cm → ${r} × ${r} × 3.14 = ?`,
-      formula: "지름을 반으로 나누면 반지름이에요",
-      ans, unitText: "cm²",
-      // 지름을 그대로 넣음 / 3.14 를 빠뜨림 / 원주 공식과 혼동
-      wrongs: pickWrongs(ans, [d * d * PI, d * d, d * PI, 2 * r * PI, r * r]),
+      ans: r,
+      ask: `원주가 ${2 * r} × 3.14 인 원을 만들어요!`,
+      hint: "원주 = 지름 × 3.14 · 지름은 반지름의 2배",
+      show: `지름 ${2 * r} → 반지름 ${r}`,
     };
   }
-  // ⭐3 — 가운데를 도려낸 고리의 넓이
-  const out = randInt(4, 7);
-  const inn = randInt(1, out - 2);
-  const ans = round2((out * out - inn * inn) * PI);
+  // ⭐3 — 넓이의 배수. 반지름이 2배면 넓이는 4배라는 관계를 몸으로 확인한다.
+  // 배수를 먼저 뽑고 그에 맞춰 기준 반지름을 정해야 한다. 기준을 먼저 뽑으면
+  // "반지름 3 원보다 9배" 처럼 <답이 9> 인, 눈금에 없는 문제가 나온다.
+  const k = [4, 9][randInt(0, 1)];
+  const mult = Math.round(Math.sqrt(k));
+  const base = randInt(1, Math.floor(R_MAX / mult));
+  const r = base * mult;
   return {
-    q: `바깥 반지름 ${out}cm, 안쪽 반지름 ${inn}cm 「고리의 넓이」는?`,
-    sub: `(${out}×${out} − ${inn}×${inn}) × 3.14 = ?`,
-    formula: "고리 넓이 = 큰 원 넓이 − 작은 원 넓이",
-    ans, unitText: "cm²",
-    // 빼는 것을 잊거나, 반지름끼리 먼저 빼고 제곱하는 실수
-    wrongs: pickWrongs(ans, [out * out * PI, (out - inn) * (out - inn) * PI,
-                             inn * inn * PI, (out * out + inn * inn) * PI]),
+    ans: r,
+    base,
+    ask: `반지름 ${base} 원보다 넓이가 ${k}배인 원을 만들어요!`,
+    hint: "넓이가 4배면 반지름은 2배 · 9배면 3배",
+    show: `반지름 ${base} × ${mult} = ${r}`,
   };
 }
 
@@ -218,14 +196,14 @@ async function init() {
 
   await showRuleCard({
     unit: UNIT,
-    title: "원 넓이 양궁",
+    title: "원 키우기",
     lines: [
-      "넓이를 계산하고, <b>그 답이 적힌 원</b>을 활로 쏘면 돼요!",
-      "<b>원의 크기가 곧 넓이예요.</b> 넓이가 4배면 원도 2배 커져요.",
+      "<b>양팔을 벌린 너비가 곧 원의 반지름</b>이에요!",
       mode === "motion"
-        ? "<b>앞손으로 겨누고</b>, 뒷손을 <b>뒤로 당겼다 놓으면</b> 발사!"
-        : "<b>겨눈 곳을 눌렀다 떼면</b> 발사!",
-      "빗나가도 괜찮아요 — <b>시간 안에 몇 번이든</b> 다시 쏠 수 있어요.",
+        ? "팔을 넓게 벌리면 원이 커지고, 모으면 작아져요."
+        : "<b>좌우로 움직이면</b> 원이 커지고 작아져요.",
+      "<b>3.14는 곱하지 않아도 돼요.</b> 넓이가 16×3.14면 16 = 4×4니까 <b>반지름 4</b>!",
+      "그 반지름으로 <b>잠깐만 멈추면</b> 성공이에요.",
     ],
   });
 
@@ -242,29 +220,25 @@ const startGate = new StartGate(mode, holdFill);
 
 let autoDiff, count, playEndAt;
 let round = null, roundAt, resolving = false;
-let balloons = [], arrow = null, judgedOk = false;
-let shots = 0;      // 이 문제에서 쏜 횟수 (한 발에 맞히면 퍼펙트)
-let aim = { x: 0, y: 0 };
-let draw = 0;              // 시위를 당긴 정도 0~1
+let curR = 3;              // 지금 몸으로 만들고 있는 반지름
+let holdMs = 0;            // 정답 반지름에 머문 시간
+let smoothArm = 1.6;       // 팔 너비(어깨 너비 배수) — 떨림을 걸러 준다
+let okFlash = 0;           // 성공 직후 정답 식을 보여 주는 시간
 let confetti = [], sparks = [];
 const shake = new ScreenShake();
 let recorder, comboShot, fallbackShot, autoRec, recordedBlob = null;
 const recIndicator = document.getElementById("recIndicator");
 let cursors = [];
 let lastFrameAt = 0;
-let pressSeen = false;
-function tapReleased() {
-  if (!pointerInput) return false;
-  if (pointerInput.consumeJustDown()) pressSeen = true;
-  if (pressSeen && !pointerInput.down) { pressSeen = false; return true; }
-  return false;
-}
 
-// 당김: 두 손 사이 거리(어깨 너비 배수). 이만큼 벌리면 만작으로 본다.
-const DRAW_MIN = 0.55, DRAW_FULL = 1.35;
-const RELEASE_DROP = 0.30;
-let lastDrawUnits = 0;
-const NEXT_MS = 320;   // 다음 것이 거의 바로 온다 — 끊기면 리듬이 죽는다
+// 양팔 너비 → 반지름. 어깨 너비의 몇 배인지로 재므로 카메라와의 거리에 상관없다.
+// 팔을 완전히 모으면 1, 활짝 벌리면 7. 한 칸이 어깨 너비의 0.34배라 충분히 크다.
+const ARM_MIN = 0.75, ARM_MAX = 2.80;
+const HOLD_MS = 320;       // 정답 반지름에 이만큼 머물면 성공
+const NEXT_MS = 500;
+
+function snap(v, min, max) { return Math.max(min, Math.min(max, Math.round(v))); }
+function lerpMap(v, a, b, ra, rb) { const t = Math.max(0, Math.min(1, (v - a) / (b - a))); return ra + (rb - ra) * t; }
 
 // 연속 성공을 크게 알려 준다 — 잘하고 있다는 게 눈에 보여야 계속 몸을 쓴다
 let streakMsg = null;
@@ -283,66 +257,55 @@ function drawStreak(ctx) {
   ctx.restore();
 }
 
-// ── 도움 표시 ── 두 번 연속 틀리면 다음 문제의 정답을 반짝여 알려 준다.
-// 계속 틀리기만 하면 아이는 포기한다. "한 번은 맞혀 보는 경험"이 있어야 다음을 시도한다.
+// ── 도움 표시 ── 두 번 연속 틀리면 정답 반지름을 눈금에 알려 준다
 let missStreak = 0;
 function helpOn() { return missStreak >= 2; }
-function drawHelpRing(ctx, x, y, r) {
-  if (!helpOn()) return;
-  const t = (performance.now() % 800) / 800;
-  ctx.save();
-  ctx.globalAlpha = 0.9 * (1 - t * 0.5);
-  ctx.strokeStyle = PARTY.gold;
-  ctx.lineWidth = Math.max(4, r * 0.22);
-  ctx.beginPath();
-  ctx.arc(x, y, r * (1.15 + t * 0.35), 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.restore();
-}
 
 function isSpurt() { return playEndAt - performance.now() < 10000; }
-// 풍선이 화면을 가로지르는 시간 — 콤보가 쌓일수록 빨라진다
-function driftMs() {
-  const base = autoDiff.level === 1 ? 8000 : autoDiff.level === 2 ? 6800 : 5600;
-  return base * Math.max(0.6, 1 - party.combo * 0.04) * (isSpurt() ? 0.85 : 1);
-}
-
-// 표적 원의 화면 반지름 — √넓이에 비례시킨다.
-// 넓이가 4배인 원은 반지름이 2배다. 그래서 <숫자가 큰 표적이 실제로 크게> 보인다.
-// 다만 오답까지 포함하면 값의 폭이 15배까지 벌어져 화면을 벗어나므로 위아래를 잘라 둔다.
-function targetRadius(v) {
-  const { h } = dims;
-  return Math.max(h * 0.040, Math.min(h * 0.125, h * 0.0105 * Math.sqrt(Math.max(1, v))));
-}
-
-// 세 표적은 한 줄 위를 같은 방향으로 흘러가며 화면 끝에서 반대편으로 돌아온다.
-// 위아래로 흩어 놓으면 큰 원끼리 겹쳐 숫자가 가려진다.
-function layoutBalloons() {
-  if (!balloons.length) return;
-  const { h } = dims;
-  for (const b of balloons) b.baseY = h * 0.62;
-}
-
 function roundMs() {
-  return autoDiff.level === 1 ? 14000 : autoDiff.level === 2 ? 12000 : 10000;
+  return autoDiff.level === 1 ? 11000 : autoDiff.level === 2 ? 9500 : 8000;
 }
 
 function newRound() {
-  const quiz = genQuiz(autoDiff.level);
-  const opts = shuffle([{ v: quiz.ans, ok: true }, ...quiz.wrongs.map((v) => ({ v, ok: false }))]);
-  const dir = Math.random() < 0.5 ? 1 : -1;
-  const speed = dims.w / (driftMs() / 1000);   // 초당 몇 px 흘러가는가
-  balloons = opts.map((o, i) => ({
-    ...o, baseY: 0, r: 0, popped: false, phase: Math.random() * 6.28,
-    x: dims.w * (0.2 + i * 0.3), y: 0, vx: speed * dir,
-  }));
-  layoutBalloons();
-  round = { quiz, ms: roundMs() };
-  resolving = false; judgedOk = false; arrow = null;
-  shots = 0;
-  draw = 0; lastDrawUnits = 0;
+  round = genRound(autoDiff.level);
+  round.ms = roundMs();
+  holdMs = 0;
+  resolving = false;
   motion.reset();
   roundAt = performance.now();
+}
+
+function succeed() {
+  resolving = true;
+  count++;
+  const { w, h } = dims;
+  const cx = w * 0.5, cy = h * 0.56;
+  party.correct(cx, cy, { base: 13 * (isSpurt() ? 2 : 1), elapsedMs: performance.now() - roundAt });
+  if (party.combo > 0 && party.combo === party.maxCombo) comboShot.capture(canvas);
+  autoDiff.reportCorrect();
+  missStreak = 0;
+  noteStreak(party.combo);
+  autoRec.trigger();
+  shake.trigger(10, 220);
+  if (!isMuted()) sound.hit("perfect");
+  spawnSparkles(sparks, cx, cy, 34, ["#fff", PARTY.gold, CUTE.purple]);
+  if (party.combo > 0 && party.combo % 5 === 0) {
+    spawnConfetti(confetti, cx, cy, 44);
+    if (!isMuted()) sound.fever();
+  }
+  // 성공한 뒤에야 넓이 숫자를 보여 준다 — 만들기 전에 띄우면 계산할 이유가 없어진다
+  okFlash = performance.now() + 900;
+  setTimeout(() => { if (state === "playing") newRound(); }, NEXT_MS);
+}
+
+function timeUp() {
+  if (resolving) return;
+  resolving = true;
+  party.wrong(dims.w * 0.5, dims.h * 0.5, `정답은 반지름 ${round.ans}`);
+  autoDiff.reportWrong();
+  missStreak++;
+  if (!isMuted()) sound.wrong();
+  setTimeout(() => { if (state === "playing") newRound(); }, NEXT_MS);
 }
 
 function startCountdown() {
@@ -393,69 +356,6 @@ function beginPlay() {
 }
 
 // ── 발사 ──
-function fire() {
-  if (arrow || resolving) return;
-  arrow = { tx: aim.x, ty: aim.y, born: performance.now() };
-  shots++;
-  draw = 0;
-  if (!isMuted()) sound.swoosh();
-  shake.trigger(5, 140);
-}
-
-function resolveArrow(x, y) {
-  arrow = null;
-  let hit = null;
-  for (const b of balloons) {
-    if (b.popped || b.y <= 0) continue;
-    if (Math.hypot(x - b.x, y - b.y) <= b.r * 1.2) { hit = b; break; }
-  }
-  // 빗나가면 벌점 없이 다시 쏜다 — 계산은 맞았는데 활 솜씨 때문에 점수를 잃으면
-  // 아이는 수학이 아니라 조작을 원망하게 된다.
-  if (!hit) {
-    party.judge(x, y, "빗나갔어요! 다시!", CUTE.blue);
-    if (!isMuted()) sound.fizzle();
-    return;
-  }
-  hit.popped = true;
-  resolving = true;
-  judgedOk = hit.ok;
-  if (hit.ok) {
-    count++;
-    const perfect = shots <= 1;
-    party.correct(hit.x, hit.y, { base: (perfect ? 16 : 12) * (isSpurt() ? 2 : 1), elapsedMs: performance.now() - roundAt });
-    if (perfect) party.judge(hit.x, hit.y - hit.r * 1.4, "✨ 첫 발 명중!", PARTY.gold);
-    if (party.combo > 0 && party.combo === party.maxCombo) comboShot.capture(canvas);
-    autoDiff.reportCorrect();
-    missStreak = 0;
-    noteStreak(party.combo);
-    autoRec.trigger();
-    shake.trigger(10, 240);
-    if (!isMuted()) sound.hit("perfect");
-    spawnSparkles(sparks, hit.x, hit.y, 32, ["#fff", PARTY.gold, CUTE.purple]);
-    if (party.combo > 0 && party.combo % 5 === 0) {
-      spawnConfetti(confetti, hit.x, hit.y, 44);
-      if (!isMuted()) sound.fever();
-    }
-  } else {
-    party.wrong(hit.x, hit.y, "다시 계산해 봐요!");
-    autoDiff.reportWrong();
-    missStreak++;
-    if (!isMuted()) sound.wrong();
-  }
-  setTimeout(() => { if (state === "playing") newRound(); }, NEXT_MS);
-}
-
-// 표적은 화면을 돌아 계속 흘러가므로 "놓쳐서 사라지는" 일은 없다.
-// 대신 문제마다 제한 시간을 두어 리듬을 만든다.
-function timeUp() {
-  resolving = true;
-  party.wrong(dims.w * 0.5, dims.h * 0.5, "시간 초과!");
-  autoDiff.reportWrong();
-  missStreak++;
-  if (!isMuted()) sound.wrong();
-  setTimeout(() => { if (state === "playing") newRound(); }, NEXT_MS);
-}
-
 function endGame() {
   state = "result";
   const { medal, label } = medalFor(count, MEDALS);
@@ -480,10 +380,10 @@ function endGame() {
   }
   document.getElementById("savePhotoBtn").onclick = async () => {
     const blob = await shot.toBlob((c, w, h) => drawPhotoOverlay(c, w, h, { title: TITLE, record: count + RECORD_SUFFIX, medal }));
-    downloadBlob(blob, `수학체육올림픽6_원넓이양궁_${formatFileTimestamp()}.png`);
+    downloadBlob(blob, `수학체육올림픽6_원키우기_${formatFileTimestamp()}.png`);
   };
   document.getElementById("saveVideoBtn").onclick = () => {
-    if (recordedBlob) downloadBlob(recordedBlob, `수학체육올림픽6_원넓이양궁_${formatFileTimestamp()}.${recorder.extension}`);
+    if (recordedBlob) downloadBlob(recordedBlob, `수학체육올림픽6_원키우기_${formatFileTimestamp()}.${recorder.extension}`);
   };
   document.getElementById("resultPanel").style.display = "flex";
   if (!isMuted()) sound.success();
@@ -512,103 +412,95 @@ function goReady() {
 }
 
 // ── 조준·당김 읽기 ──
-function readAim() {
+// ── 몸으로 반지름 만들기 ──
+// 모션: 양팔 너비. 터치·마우스: 커서의 가로 위치.
+function readBody(dt) {
   if (mode === "motion") {
     const f = motion.last;
     if (!f) return;
-    // 앞손 = 화면에서 더 왼쪽에 있는 손목(오른손잡이 기준 활을 든 손). 그 손이 조준점이 된다.
-    const front = f.lw.x < f.rw.x ? f.lw : f.rw;
-    aim.x += (front.x - aim.x) * 0.35;
-    aim.y += (front.y - aim.y) * 0.35;
-    // 당김 = 두 손 사이 거리
     const units = Math.hypot(f.rw.x - f.lw.x, f.rw.y - f.lw.y) / f.unit;
-    draw = Math.max(0, Math.min(1, (units - DRAW_MIN) / (DRAW_FULL - DRAW_MIN)));
-    // 만작이었다가 확 줄면 발사
-    if (lastDrawUnits >= DRAW_FULL * 0.92 && units < lastDrawUnits - RELEASE_DROP) {
-      fire();
-      lastDrawUnits = 0;
-      return;
-    }
-    lastDrawUnits = units;
-    return;
-  }
-  const p = cursors[0];
-  if (p) { aim.x = p.x; aim.y = p.y; }
-  draw = 1;
-  if (tapReleased()) fire();   // 눌렀다 떼면 발사
-}
-
-// ── 표적 원 — 한 줄 위를 흘러가며 화면 끝에서 반대편으로 돌아온다 ──
-// 원의 크기가 곧 그 원의 넓이다(√넓이에 비례). 점수 링 같은 장식은 없다.
-function drawTargets(ctx, now, dt) {
-  const { w } = dims;
-  for (const b of balloons) {
-    b.r = targetRadius(b.v);
-    if (!b.popped) {
-      b.x += b.vx * dt;
-      if (b.x < -b.r * 1.2) b.x = w + b.r * 1.2;
-      if (b.x > w + b.r * 1.2) b.x = -b.r * 1.2;
-    }
-    b.y = b.baseY + Math.sin(now / 700 + b.phase) * b.r * 0.16;
-    if (b.popped) continue;
-
-    if (b.ok) drawHelpRing(ctx, b.x, b.y, b.r);
-    // 원 안에 반지름 선을 그어 "이게 원이다"를 분명히 한다
-    drawSticker(ctx, b.x, b.y, b.r, CUTE.purple, { lineWidth: Math.max(3, b.r * 0.09) });
-    ctx.save();
-    ctx.strokeStyle = "rgba(255,255,255,0.55)";
-    ctx.lineWidth = Math.max(2, b.r * 0.05);
-    ctx.setLineDash([b.r * 0.16, b.r * 0.14]);
-    ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.x + b.r, b.y); ctx.stroke();
-    ctx.restore();
-
-    const label = fmt(b.v);
-    let fs = b.r * 0.52;
-    ctx.save(); ctx.font = `900 ${fs}px sans-serif`;
-    const tw = ctx.measureText(label).width; ctx.restore();
-    if (tw > b.r * 1.5) fs *= (b.r * 1.5) / tw;
-    drawChunkyText(ctx, label, b.x, b.y, fs, "#fff",
-      { outline: CUTE.ink, outlineWidth: Math.max(3, fs * 0.24) });
+    smoothArm += (units - smoothArm) * Math.min(1, dt * 9);
+    curR = snap(lerpMap(smoothArm, ARM_MIN, ARM_MAX, R_MIN, R_MAX), R_MIN, R_MAX);
+  } else if (cursors[0]) {
+    curR = snap(lerpMap(cursors[0].x, dims.w * 0.12, dims.w * 0.88, R_MIN, R_MAX), R_MIN, R_MAX);
   }
 }
 
-// ── 조준선 · 시위 게이지 ──
-function drawAim(ctx) {
-  const r = fluidPx(dims, 34, { min: 24, max: 48 });
-  const ready = draw >= 0.92;
-  // 당길수록 조준원이 작아진다 — 정밀 사격의 긴장감
-  const ring = r * (1.6 - draw * 0.65);
+// 화면에서 반지름 1칸이 몇 px 인가 — 반지름 7 이 화면에 다 들어와야 한다
+function unitPx() { return Math.min(dims.w * 0.040, dims.h * 0.048); }
+
+function drawMyCircle(ctx, now) {
+  const { w, h } = dims;
+  const cx = w * 0.5, cy = h * 0.56;
+  const px = unitPx();
+  const hit = !resolving && curR === round.ans;
+
+  // 내가 만들고 있는 원
   ctx.save();
-  ctx.strokeStyle = ready ? CUTE.green : "#fff";
-  ctx.lineWidth = Math.max(3, r * 0.13);
-  ctx.globalAlpha = 0.9;
-  ctx.beginPath(); ctx.arc(aim.x, aim.y, ring, 0, Math.PI * 2); ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(aim.x - ring * 1.35, aim.y); ctx.lineTo(aim.x - ring * 0.5, aim.y);
-  ctx.moveTo(aim.x + ring * 0.5, aim.y); ctx.lineTo(aim.x + ring * 1.35, aim.y);
-  ctx.moveTo(aim.x, aim.y - ring * 1.35); ctx.lineTo(aim.x, aim.y - ring * 0.5);
-  ctx.moveTo(aim.x, aim.y + ring * 0.5); ctx.lineTo(aim.x, aim.y + ring * 1.35);
-  ctx.stroke();
+  ctx.fillStyle = hit ? "rgba(6,214,160,0.30)" : "rgba(155,120,230,0.22)";
+  ctx.strokeStyle = hit ? CUTE.green : CUTE.purple;
+  ctx.lineWidth = fluidPx(dims, 6, { min: 4, max: 9 });
+  ctx.beginPath(); ctx.arc(cx, cy, curR * px, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  // 반지름 선 — "이 길이가 반지름이다"를 분명히 한다
+  ctx.strokeStyle = "rgba(255,255,255,0.9)";
+  ctx.lineWidth = fluidPx(dims, 3.5, { min: 2.5, max: 5 });
+  ctx.setLineDash([px * 0.3, px * 0.24]);
+  ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + curR * px, cy); ctx.stroke();
   ctx.restore();
 
-  if (mode === "motion") {
-    // 시위 게이지 — 화면 왼쪽 아래에 세로 막대
-    const { w, h } = dims;
-    const gw = fluidPx(dims, 22, { min: 16, max: 30 }), gh = h * 0.24;
-    const gx = w * 0.07, gy = h * 0.66;
-    drawStickerRect(ctx, gx, gy, gw, gh, gw / 2, "rgba(255,255,255,0.85)",
-      { lineWidth: Math.max(2, gw * 0.14), drop: 0 });
+  // 지금 반지름
+  const fs = fluidPx(dims, 26, { min: 19, max: 36 });
+  drawStickerRect(ctx, cx, cy, fs * 6.4, fs * 1.9, fs * 0.5,
+    hit ? CUTE.green : CUTE.cream, { lineWidth: Math.max(3, fs * 0.14), drop: fs * 0.18 });
+  drawChunkyText(ctx, `반지름 ${curR}`, cx, cy, fs, hit ? "#fff" : CUTE.ink,
+    { outline: hit ? CUTE.ink : "#fff", outlineWidth: Math.max(2.5, fs * 0.14) });
+
+  // 맞는 반지름에 머무는 동안 차오르는 고리
+  if (hit && holdMs > 0) {
     ctx.save();
-    ctx.fillStyle = ready ? CUTE.green : PARTY.gold;
-    const fh = Math.max(gw, gh * draw);
+    ctx.strokeStyle = PARTY.gold;
+    ctx.lineWidth = fluidPx(dims, 9, { min: 6, max: 14 });
+    ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.roundRect(gx - gw / 2, gy + gh / 2 - fh, gw, fh, gw / 2);
-    ctx.fill();
+    ctx.arc(cx, cy, curR * px + fluidPx(dims, 10, { min: 7, max: 15 }),
+      -Math.PI / 2, -Math.PI / 2 + (holdMs / HOLD_MS) * Math.PI * 2);
+    ctx.stroke();
     ctx.restore();
-    drawChunkyText(ctx, ready ? "놓아!" : "당겨!", gx, gy + gh / 2 + gw * 1.1,
-      fluidPx(dims, 16, { min: 12, max: 22 }), ready ? CUTE.green : "#fff",
-      { outline: CUTE.ink, outlineWidth: fluidPx(dims, 5, { min: 3, max: 7 }) });
   }
+
+  // 성공 직후에만 넓이 식을 보여 준다 (배우고 넘어가라고)
+  if (now < okFlash) {
+    const efs = fluidPx(dims, 22, { min: 16, max: 30 });
+    drawChunkyText(ctx, `✓ ${round.show}`, cx, cy - curR * px - efs * 1.6, efs, PARTY.gold,
+      { outline: CUTE.ink, outlineWidth: Math.max(3, efs * 0.22) });
+  }
+}
+
+// 아래쪽 반지름 눈금 — 지금 어디쯤인지, 몇 칸 더 벌려야 하는지가 보여야 한다
+function drawScale(ctx) {
+  const { w, h } = dims;
+  const y = h * 0.90;
+  const x0 = w * 0.14, x1 = w * 0.86;
+  const gap = (x1 - x0) / (R_MAX - R_MIN);
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,255,255,0.8)";
+  ctx.lineWidth = fluidPx(dims, 4, { min: 3, max: 6 });
+  ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke();
+  ctx.restore();
+  const fs = fluidPx(dims, 17, { min: 13, max: 23 });
+  for (let r = R_MIN; r <= R_MAX; r++) {
+    const x = x0 + gap * (r - R_MIN);
+    const here = r === curR;
+    const want = helpOn() && r === round.ans;
+    drawSticker(ctx, x, y, fs * (here ? 1.05 : 0.72),
+      here ? PARTY.gold : want ? CUTE.green : "rgba(255,255,255,0.75)",
+      { lineWidth: Math.max(2, fs * 0.16) });
+    drawChunkyText(ctx, String(r), x, y, fs * (here ? 0.9 : 0.66), CUTE.ink,
+      { outline: "#fff", outlineWidth: Math.max(2, fs * 0.12) });
+  }
+  drawChunkyText(ctx, mode === "motion" ? "양팔을 벌려 반지름을 맞춰요" : "좌우로 움직여 반지름을 맞춰요",
+    w * 0.5, y + fs * 2.0, fs * 0.85, "#fff",
+    { outline: CUTE.ink, outlineWidth: Math.max(3, fs * 0.2) });
 }
 
 function loop(tsMs) {
@@ -639,7 +531,7 @@ function loop(tsMs) {
     const f = motion.last;
     if (f) {
       const r = fluidPx(dims, 20, { min: 14, max: 28 });
-      // 두 손을 잇는 시위
+      // 두 손을 잇는 선 — 이 길이가 곧 반지름이다
       ctx.save();
       ctx.strokeStyle = "rgba(255,255,255,0.8)";
       ctx.lineWidth = Math.max(2.5, r * 0.2);
@@ -649,7 +541,7 @@ function loop(tsMs) {
         drawSticker(ctx, f[k].x, f[k].y, r, CUTE.cream, { lineWidth: Math.max(3, r * 0.16) });
       }
     } else if (state === "playing") {
-      drawChunkyText(ctx, "카메라에 두 손이 보이게 물러서 주세요!", w * 0.5, h * 0.5,
+      drawChunkyText(ctx, "카메라에 양팔이 다 보이게 물러서 주세요!", w * 0.5, h * 0.5,
         fluidPx(dims, 22, { min: 16, max: 30 }), "#fff",
         { outline: CUTE.ink, outlineWidth: fluidPx(dims, 6, { min: 4, max: 8 }) });
     }
@@ -667,70 +559,49 @@ function stepGame() {
   if (remain <= 0) { endGame(); return; }
   const now = performance.now();
 
-  if (!resolving) readAim();
-
-  // 화살 비행 — 0.22초 뒤 판정
-  if (arrow) {
-    const t = (now - arrow.born) / 220;
-    if (t >= 1) resolveArrow(arrow.tx, arrow.ty);
+  if (!resolving) {
+    readBody(dt);
+    // 맞는 반지름에 잠깐 머물면 성공. 버티기가 아니라 <지나치지 않았다>는 확인이다.
+    if (curR === round.ans) {
+      holdMs += dt * 1000;
+      if (holdMs >= HOLD_MS) succeed();
+    } else {
+      holdMs = Math.max(0, holdMs - dt * 1400);
+    }
   }
 
-  drawTargets(ctx, now, dt);
-  if (!resolving) drawAim(ctx);
+  drawMyCircle(ctx, now);
+  drawScale(ctx);
 
   // 이 문제에 남은 시간 띠
   if (!resolving) {
     const t = Math.max(0, 1 - (now - roundAt) / round.ms);
-    const bw = w * 0.5, bh = fluidPx(dims, 9, { min: 6, max: 13 });
-    const bx = w * 0.5, by = h * 0.80;
-    drawStickerRect(ctx, bx, by, bw, bh, bh / 2, "rgba(255,255,255,0.8)", { lineWidth: 2, drop: 0 });
+    const bw = w * 0.44, bh = fluidPx(dims, 9, { min: 6, max: 13 });
+    const by = h * 0.315;
+    drawStickerRect(ctx, w * 0.5, by, bw, bh, bh / 2, "rgba(255,255,255,0.8)", { lineWidth: 2, drop: 0 });
     ctx.save();
     ctx.fillStyle = t < 0.3 ? CUTE.red : PARTY.gold;
     ctx.beginPath();
-    ctx.roundRect(bx - bw / 2, by - bh / 2, Math.max(bh, bw * t), bh, bh / 2);
+    ctx.roundRect(w * 0.5 - bw / 2, by - bh / 2, Math.max(bh, bw * t), bh, bh / 2);
     ctx.fill();
     ctx.restore();
     if (t <= 0) timeUp();
   }
 
-  if (arrow) {
-    // 날아가는 화살 — 조준점에서 짧게 뻗는 선으로 표현
-    const t = Math.min(1, (now - arrow.born) / 220);
-    const len = fluidPx(dims, 60, { min: 40, max: 86 }) * (1 - t);
-    ctx.save();
-    ctx.strokeStyle = PARTY.gold;
-    ctx.lineWidth = fluidPx(dims, 7, { min: 5, max: 10 });
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(arrow.tx, arrow.ty + len);
-    ctx.lineTo(arrow.tx, arrow.ty);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-
-  const hudBottom = party.drawHud(ctx, dims, { remainMs: remain, count, suffix: "발" });
-
-  const lines = [
-    { text: round.quiz.q.replace("<", "「").replace(">", "」"), size: 17, chunky: true, color: PARTY.gold },
-    // 공식에 숫자를 대입하는 단계가 가장 큰 벽이라, 대입까지 끝난 식을 크게 보여준다.
-    // 다만 두 줄이 서로 겹치지 않을 만큼만 키운다(19+27 은 겹쳤다).
-    { text: round.quiz.sub, size: 24, chunky: true, color: CUTE.ink },
-  ];
-  drawCuteBanner(ctx, dims, lines, fluidPx, { top: hudBottom });
+  const hudBottom = party.drawHud(ctx, dims, { remainMs: remain, count, suffix: "개" });
+  drawCuteBanner(ctx, dims, [
+    { text: round.ask, size: 24, chunky: true, color: PARTY.gold },
+    { text: round.hint, size: 14, color: CUTE.ink },
+  ], fluidPx, { top: hudBottom });
 
   if (remain < 10000) {
     const fs2 = fluidPx(dims, 22, { min: 16, max: 30 });
     const puls = 1 + Math.sin(now / 120) * 0.08;
-    ctx.save(); ctx.translate(w * 0.5, h * 0.30); ctx.scale(puls, puls);
+    ctx.save(); ctx.translate(w * 0.5, h * 0.36); ctx.scale(puls, puls);
     drawChunkyText(ctx, "🔥 라스트 스퍼트! 코인 2배", 0, 0, fs2, CUTE.red,
       { outline: "#fff", outlineWidth: Math.max(4, fs2 * 0.24) });
     ctx.restore();
   }
-  drawChunkyText(ctx,
-    mode === "motion" ? "정답 넓이의 원을 쏴요! 앞손 겨냥 · 뒷손 당겼다 놓기" : "정답 넓이의 원을 쏴요! 눌렀다 떼면 발사",
-    w * 0.5, h * 0.96, fluidPx(dims, 15, { min: 11, max: 20 }), "#fff",
-    { outline: CUTE.ink, outlineWidth: fluidPx(dims, 5, { min: 3.5, max: 7 }) });
 
   party.update(dt);
   confetti = updateConfetti(confetti, dt); drawConfetti(ctx, confetti);
@@ -738,7 +609,6 @@ function stepGame() {
   drawStreak(ctx);
   party.drawFx(ctx, dims);
   party.drawFeverFrame(ctx, dims);
-
   drawVignette(ctx, w, h, 0.16);
   drawLevelStars(ctx, dims, autoDiff.level, fluidPx);
 }
