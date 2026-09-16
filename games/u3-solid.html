@@ -25,13 +25,11 @@
   <div class="overlay-panel" id="rulePanel" style="display:none">
     <div class="rule-card">
       <div class="rule-head">
-        <div class="rule-char">🐨</div>
+        <div class="rule-char">🧊</div>
         <div>
-          <div class="rule-name">던지</div>
           <h2 class="rule-title">쌓기나무 표적 던지기</h2>
         </div>
       </div>
-      <p class="rule-cheer"></p>
       <ul class="rule-list"></ul>
       <div class="rule-timer"><div class="rule-timer-fill"></div></div>
       <button class="rule-go">좋아, 시작!</button>
@@ -87,7 +85,7 @@ import {
   drawBunting, drawGloveCursor, drawLevelStars, drawCuteBanner,
 } from "../js/cute.js?v=7";
 import {
-  PARTY, CHARACTERS, Party, drawPartyBackdrop, drawCrowd, drawMascot,
+  PARTY, Party, drawPartyBackdrop, drawCrowd,
   showRuleCard, renderPodium, irisTransition,
 } from "../js/party.js?v=2";
 requestWakeLock();
@@ -96,7 +94,6 @@ const UNIT = "n3";
 const TITLE = "쌓기나무 표적 던지기";
 const RECORD_SUFFIX = "개 명중";
 const MEDALS = { bronze: 4, silver: 7, gold: 10 };
-const CHAR = CHARACTERS[UNIT];
 const mode = InputMode.get();
 
 const video = document.getElementById("video");
@@ -861,8 +858,6 @@ function stepGame() {
 
   drawCards(ctx);
 
-  const br = fluidPx(dims, 22, { min: 16, max: 30 });
-  drawMascot(ctx, w * 0.95, h * 0.62, br, CHAR, party.currentMood(remain));
 
   const hudBottom = party.drawHud(ctx, dims, { remainMs: remain, count, suffix: "개" });
 

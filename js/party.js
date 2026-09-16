@@ -6,7 +6,7 @@
 // 흐름을 6종목이 똑같이 쓰도록 한곳에 모아 둔다. 각 게임은 자기 문제·판정만 짜면 된다.
 
 import {
-  CUTE, drawSticker, drawStickerRect, drawChunkyText, drawSparkle, bob,
+  CUTE, drawSticker, drawStickerRect, drawChunkyText,
 } from "./cute.js";
 import { SmoothedPoint } from "./engine.js";
 
@@ -22,17 +22,20 @@ export const PARTY = {
 // 마스코트 6마리 — 종목마다 담당 캐릭터가 룰 설명·응원·아쉬움을 다 표현한다.
 // 이모지 기반이라 이미지 파일 없이 바로 동작하고, 나중에 그림으로 교체할 수 있다.
 // ---------------------------------------------------------------------------
-export const CHARACTERS = {
-  n1: { emoji: "🦅", name: "셔틀", color: CUTE.red, cheer: "정답 셔틀콕만 받아쳐!" },
-  n2: { emoji: "🦉", name: "조준이", color: CUTE.blue, cheer: "두 손 모으고, 소수점을 잘 봐!" },
-  n3: { emoji: "🐨", name: "던지", color: CUTE.green, cheer: "정답 카드에 던져서 맞히자!" },
-  n4: { emoji: "🐯", name: "스파이크", color: CUTE.orange, cheer: "정답 자리로 달려가 내리꽂아!" },
-  n5: { emoji: "🦌", name: "샤프", color: CUTE.purple, cheer: "활을 당겨! 반지름×반지름×3.14" },
-  n6: { emoji: "🐧", name: "카고", color: CUTE.cyan, cheer: "무거운 화물은 힘껏 들어 올려!" },
+// 종목별 아이콘과 색.
+// 예전에는 종목마다 동물 캐릭터(🦅 셔틀 · 🐨 돌리 …)가 있어서 룰카드에서 말을 걸고
+// 경기 중에도 화면 구석에 떠 있었다. 게임 내용과 아무 상관이 없어 화면만 어지럽혔다.
+// 이제는 <그 종목의 운동 아이콘>만 쓴다.
+export const UNIT_THEME = {
+  n1: { icon: "🏸", color: CUTE.red },
+  n2: { icon: "🎯", color: CUTE.blue },
+  n3: { icon: "🧊", color: CUTE.green },
+  n4: { icon: "🏐", color: CUTE.orange },
+  n5: { icon: "🏹", color: CUTE.purple },
+  n6: { icon: "🚀", color: CUTE.cyan },
 };
 
 // 표정 5종 — 캐릭터 아래에 작게 붙는 기분 뱃지
-const MOOD_BADGE = { idle: "", happy: "💛", sad: "💧", hurry: "💦", combo: "🔥" };
 
 // ---------------------------------------------------------------------------
 // 양손 입력 — 이 학년판의 핵심.
@@ -177,46 +180,6 @@ export function drawCrowd(ctx, dims, cheerUntil = 0) {
 }
 
 // ---------------------------------------------------------------------------
-// 마스코트 그리기 — 색 스티커 위에 동물 이모지를 얹고, 기분에 따라 통통 튄다
-// ---------------------------------------------------------------------------
-export function drawMascot(ctx, x, y, r, char, mood = "idle", opts = {}) {
-  const now = performance.now();
-  const jumpy = mood === "happy" || mood === "combo";
-  const lift = jumpy ? Math.abs(Math.sin(now / 150)) * r * 0.35 : bob(1.2, r * 0.08);
-  const squash = jumpy ? 1 + Math.sin(now / 150) * 0.06 : 1;
-  ctx.save();
-  ctx.translate(x, y - lift);
-  ctx.scale(1 / squash, squash);
-  drawSticker(ctx, 0, 0, r, char.color, { lineWidth: Math.max(3, r * 0.14) });
-  ctx.font = `${r * 1.15}px sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(char.emoji, 0, r * 0.06);
-  ctx.restore();
-
-  if (mood === "happy" || mood === "combo") {
-    for (let i = 0; i < 3; i++) {
-      const a = now / 260 + (i / 3) * Math.PI * 2;
-      drawSparkle(ctx, x + Math.cos(a) * r * 1.5, y - lift + Math.sin(a) * r * 1.5, r * 0.26, PARTY.gold, a);
-    }
-  }
-  const badge = MOOD_BADGE[mood];
-  if (badge) {
-    ctx.save();
-    ctx.font = `${r * 0.62}px sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(badge, x + r * 0.85, y - lift - r * 0.8);
-    ctx.restore();
-  }
-  if (opts.name) {
-    drawChunkyText(ctx, char.name, x, y + r * 1.5, r * 0.42, "#fff", {
-      outline: CUTE.ink, outlineWidth: Math.max(2.5, r * 0.12),
-    });
-  }
-}
-
-// ---------------------------------------------------------------------------
 // 코인 — 마리오파티의 그 코인. 정답 시 튀어 올랐다가 상단 카운터로 빨려 들어간다.
 // ---------------------------------------------------------------------------
 export function drawCoin(ctx, x, y, r, spin = 0) {
@@ -256,7 +219,6 @@ export function judgeKind(elapsedMs) {
 export class Party {
   constructor({ unit, sound, isMuted }) {
     this.unit = unit;
-    this.char = CHARACTERS[unit];
     this.sound = sound;
     this.isMuted = isMuted || (() => false);
     this.reset();
@@ -450,18 +412,16 @@ export class Party {
 }
 
 // ---------------------------------------------------------------------------
-// 룰카드 — 게임 시작 전 캐릭터가 말풍선으로 조작법을 설명한다.
+// 룰카드 — 게임 시작 전 조작법을 보여 준다.
 // 모션 모드에서는 아이가 화면에서 떨어져 있을 수 있어 7초 뒤 자동으로 넘어간다.
 // ---------------------------------------------------------------------------
 export function showRuleCard({ unit, title, lines, autoMs = 7000 }) {
   return new Promise((resolve) => {
-    const char = CHARACTERS[unit];
+    const theme = UNIT_THEME[unit];
     const panel = document.getElementById("rulePanel");
     if (!panel) { resolve(); return; }
-    panel.querySelector(".rule-char").textContent = char.emoji;
-    panel.querySelector(".rule-name").textContent = char.name;
+    panel.querySelector(".rule-char").textContent = theme.icon;
     panel.querySelector(".rule-title").textContent = title;
-    panel.querySelector(".rule-cheer").textContent = `"${char.cheer}"`;
     const ul = panel.querySelector(".rule-list");
     ul.innerHTML = "";
     for (const l of lines) {
@@ -500,7 +460,7 @@ export function showRuleCard({ unit, title, lines, autoMs = 7000 }) {
 // 시상대 결과 — 코인이 하나씩 세어지며 별로 환산되는 마리오파티식 결과 발표
 // ---------------------------------------------------------------------------
 export function renderPodium({ unit, medal, label, coins, maxCombo, count, suffix, best }) {
-  const char = CHARACTERS[unit];
+  const theme = UNIT_THEME[unit];
   const host = document.getElementById("podium");
   if (!host) return;
 
@@ -509,9 +469,9 @@ export function renderPodium({ unit, medal, label, coins, maxCombo, count, suffi
   const earnedStar = medal !== "🏅";
 
   // 칭호 — 메달만으로는 "잘했다"는 느낌이 약해서, 코인에 따라 등급을 하나 더 준다.
-  // 아무리 못해도 🐣 새싹은 받으므로 빈손으로 끝나는 일이 없다.
+  // 아무리 못해도 🌱 새싹은 받으므로 빈손으로 끝나는 일이 없다.
   const RANKS = [
-    { min: 0,   emoji: "🐣", name: "새싹 선수",   line: "출발이 좋아! 다음엔 더 잘할 수 있어" },
+    { min: 0,   emoji: "🌱", name: "새싹 선수",   line: "출발이 좋아! 다음엔 더 잘할 수 있어" },
     { min: 40,  emoji: "🏃", name: "도전자",     line: "몸이 잘 풀렸는걸?" },
     { min: 90,  emoji: "🔥", name: "에이스",     line: "오늘 컨디션 최고인데!" },
     { min: 160, emoji: "🌟", name: "슈퍼스타",   line: "관중석이 난리 났어!" },
@@ -521,7 +481,7 @@ export function renderPodium({ unit, medal, label, coins, maxCombo, count, suffi
 
   host.innerHTML = `
     <div class="podium-stage">
-      <div class="podium-char">${char.emoji}</div>
+      <div class="podium-char">${theme.icon}</div>
       <div class="podium-block">
         <div class="podium-medal">${medal}</div>
         <div class="podium-label">${label}</div>
@@ -534,7 +494,7 @@ export function renderPodium({ unit, medal, label, coins, maxCombo, count, suffi
       <span class="pc-stars" id="pcStars"></span>
     </div>
     <div class="podium-rank"><span class="pr-emoji">${rank.emoji}</span><span class="pr-name">${rank.name}</span></div>
-    <div class="podium-line">${char.name}: "${rank.line}"</div>
+    <div class="podium-line">${rank.line}</div>
   `;
 
   // 코인 카운트업 — 숫자가 다 올라가면 별이 하나씩 톡톡 뜬다

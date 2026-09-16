@@ -25,13 +25,11 @@
   <div class="overlay-panel" id="rulePanel" style="display:none">
     <div class="rule-card">
       <div class="rule-head">
-        <div class="rule-char">🦉</div>
+        <div class="rule-char">🎯</div>
         <div>
-          <div class="rule-name">조준이</div>
           <h2 class="rule-title">소수점 클레이 사격</h2>
         </div>
       </div>
-      <p class="rule-cheer"></p>
       <ul class="rule-list"></ul>
       <div class="rule-timer"><div class="rule-timer-fill"></div></div>
       <button class="rule-go">좋아, 시작!</button>
@@ -87,7 +85,7 @@ import {
   drawBunting, drawGloveCursor, drawLevelStars, drawCuteBanner,
 } from "../js/cute.js?v=7";
 import {
-  PARTY, CHARACTERS, Party, drawPartyBackdrop, drawCrowd, drawMascot,
+  PARTY, Party, drawPartyBackdrop, drawCrowd,
   showRuleCard, renderPodium, irisTransition,
 } from "../js/party.js?v=2";
 requestWakeLock();
@@ -96,7 +94,6 @@ const UNIT = "n2";
 const TITLE = "소수점 클레이 사격";
 const RECORD_SUFFIX = "발 명중";
 const MEDALS = { bronze: 6, silver: 11, gold: 16 };
-const CHAR = CHARACTERS[UNIT];
 const mode = InputMode.get();
 
 const video = document.getElementById("video");
@@ -683,8 +680,6 @@ function stepGame() {
   if (!resolving) drawAim(ctx);
   drawAmmo(ctx);
 
-  const br = fluidPx(dims, 20, { min: 15, max: 27 });
-  drawMascot(ctx, w * 0.94, h * 0.94, br, CHAR, party.currentMood(remain));
 
   const hudBottom = party.drawHud(ctx, dims, { remainMs: remain, count, suffix: "발" });
   drawCuteBanner(ctx, dims, [

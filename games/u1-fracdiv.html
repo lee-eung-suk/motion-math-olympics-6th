@@ -25,13 +25,11 @@
   <div class="overlay-panel" id="rulePanel" style="display:none">
     <div class="rule-card">
       <div class="rule-head">
-        <div class="rule-char">🦅</div>
+        <div class="rule-char">🏸</div>
         <div>
-          <div class="rule-name">셔틀</div>
           <h2 class="rule-title">분수 배드민턴</h2>
         </div>
       </div>
-      <p class="rule-cheer"></p>
       <ul class="rule-list"></ul>
       <div class="rule-timer"><div class="rule-timer-fill"></div></div>
       <button class="rule-go">좋아, 시작!</button>
@@ -87,7 +85,7 @@ import {
   drawBunting, drawLevelStars, drawCuteBanner,
 } from "../js/cute.js?v=7";
 import {
-  PARTY, CHARACTERS, Party, drawPartyBackdrop, drawCrowd, drawMascot,
+  PARTY, Party, drawPartyBackdrop, drawCrowd,
   showRuleCard, renderPodium, irisTransition,
 } from "../js/party.js?v=2";
 requestWakeLock();
@@ -96,8 +94,6 @@ const UNIT = "n1";
 const TITLE = "분수 배드민턴";
 const RECORD_SUFFIX = "점";
 const MEDALS = { bronze: 5, silver: 9, gold: 14 };
-const CHAR = CHARACTERS[UNIT];
-const OPP = CHARACTERS.n4;
 const mode = InputMode.get();
 
 const video = document.getElementById("video");
@@ -625,8 +621,28 @@ function drawMe(ctx, now) {
 function drawOpp(ctx, dt) {
   const { h } = dims;
   opp.x += (opp.target - opp.x) * Math.min(1, dt * 3.2);
-  const r = fluidPx(dims, 26, { min: 19, max: 36 });
-  drawMascot(ctx, opp.x, groundY() - dims.h * 0.075 - r, r, OPP, opp.mood);
+  const gy = groundY();
+  const r = fluidPx(dims, 24, { min: 17, max: 33 });
+  const bodyH = r * 1.8;
+  // 기뻐하면 살짝 뛴다 — 동물 마스코트 대신 나와 같은 모양의 선수로 그린다
+  const lift = opp.mood === "happy" ? Math.abs(Math.sin(performance.now() / 150)) * r * 0.4 : 0;
+  const y = gy - lift;
+  ctx.save();
+  ctx.fillStyle = CUTE.blue;
+  ctx.strokeStyle = CUTE.ink;
+  ctx.lineWidth = Math.max(3, r * 0.16);
+  ctx.beginPath();
+  ctx.roundRect(opp.x - r * 0.5, y - bodyH, r, bodyH, r * 0.35);
+  ctx.fill(); ctx.stroke();
+  ctx.restore();
+  drawSticker(ctx, opp.x, y - bodyH - r * 0.55, r * 0.62, CUTE.cream, { lineWidth: Math.max(3, r * 0.14) });
+  // 팔 — 아쉬우면 늘어뜨리고, 신나면 번쩍 든다
+  const up = opp.mood === "happy";
+  ctx.save();
+  ctx.translate(opp.x + r * 0.2, y - bodyH * 0.95);
+  ctx.strokeStyle = CUTE.ink; ctx.lineWidth = Math.max(3, r * 0.17); ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(up ? r * 0.5 : r * 0.7, up ? -r * 1.0 : r * 0.5); ctx.stroke();
+  ctx.restore();
 }
 
 function drawShuttle(ctx) {

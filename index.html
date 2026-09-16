@@ -131,7 +131,7 @@
 
 <script type="module">
 import { HighScore, InputMode, FileAudioLoop, showSoundHint } from "./js/engine.js?v=4";
-import { CHARACTERS, irisTransition } from "./js/party.js?v=2";
+import { irisTransition } from "./js/party.js?v=2";
 
 const isMuted = () => localStorage.getItem("smo_muted") === "1";
 const bgm = new FileAudioLoop("assets/sounds/bgm.mp3", 0.35);
@@ -184,7 +184,7 @@ UNITS.forEach((u, i) => {
       <span class="card-emoji">${u.emoji}</span>
     </span>
     <span class="card-unit">${u.unit}</span>
-    <span class="card-name">${CHARACTERS[u.id].emoji} ${u.name}</span>
+    <span class="card-name">${u.name}</span>
     <span class="card-motion">${u.motion}</span>
     <span class="card-foot">
       <span class="card-best">${best ? best.label : "아직 기록 없음"}</span>
