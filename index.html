@@ -140,7 +140,7 @@ if (!isMuted()) bgm.play(showSoundHint);
 // 카드 색은 종목마다 다르게 — 스테이지 셀렉트처럼 한눈에 구분되게 한다
 const UNITS = [
   { id: "n1", emoji: "🏸", unit: "1단원 · 분수의 나눗셈", name: "분수 배드민턴",
-    motion: "분수가 적힌 셔틀콕이 날아와요. 정답만 골라 받아쳐요!",
+    motion: "“이 안에 조각이 몇 개?” 띠 그림을 보고 정답 셔틀콕을 받아쳐요",
     href: "games/u1-fracdiv.html", bg: "#FFE1E1" },
   { id: "n2", emoji: "🎯", unit: "2단원 · 소수의 나눗셈", name: "소수점 클레이 사격",
     motion: "두 손을 모아 총을 만들고, 사방에서 날아오는 접시를 쏴요",
@@ -148,11 +148,11 @@ const UNITS = [
   { id: "n3", emoji: "🧊", unit: "3단원 · 공간과 입체", name: "쌓기나무 표적 던지기",
     motion: "흘러가는 정답 카드에 공을 던져 맞혀요",
     href: "games/u3-solid.html", bg: "#DFF8E7" },
-  { id: "n4", emoji: "🏐", unit: "4단원 · 비례식과 비례배분", name: "비례 배구",
-    motion: "묶음을 세고, 정답 칸 앞으로 달려가 점프 스파이크!",
+  { id: "n4", emoji: "🪢", unit: "4단원 · 비례식과 비례배분", name: "비례 줄다리기",
+    motion: "내 몸이 곧 경계선! 좌우로 걸어가 구슬 줄을 비율대로 나눠요",
     href: "games/u4-ratio.html", bg: "#FFEAD1" },
   { id: "n5", emoji: "⭕", unit: "5단원 · 원의 넓이", name: "원 키우기",
-    motion: "양팔 너비가 곧 반지름! 넓이에 맞는 원을 몸으로 만들어요",
+    motion: "넓이를 4배로 하려면 반지름은 2배! 양팔로 원을 키워요",
     href: "games/u5-circle.html", bg: "#F1E4FF" },
   { id: "n6", emoji: "🛢️", unit: "6단원 · 원기둥·원뿔·구", name: "몸으로 원기둥 만들기",
     motion: "양팔은 반지름, 앉은 키는 높이! 부피에 맞게 몸으로 만들어요",
@@ -224,7 +224,7 @@ for (let i = 0; i < 14; i++) {
 // ── 흐르는 띠 ──
 const tickerWords = [
   "🏸 분수 배드민턴", "🎯 소수점 클레이 사격", "🧊 쌓기나무 표적 던지기",
-  "🏐 비례 배구", "⭕ 원 키우기", "🛢️ 몸으로 원기둥 만들기",
+  "🪢 비례 줄다리기", "⭕ 원 키우기", "🛢️ 몸으로 원기둥 만들기",
 ];
 const track = document.getElementById("tickerTrack");
 track.innerHTML = [...tickerWords, ...tickerWords].map((w) => `<span>${w}</span>`).join("");

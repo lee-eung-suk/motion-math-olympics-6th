@@ -30,7 +30,7 @@ export const UNIT_THEME = {
   n1: { icon: "🏸", color: CUTE.red },
   n2: { icon: "🎯", color: CUTE.blue },
   n3: { icon: "🧊", color: CUTE.green },
-  n4: { icon: "🏐", color: CUTE.orange },
+  n4: { icon: "🪢", color: CUTE.orange },
   n5: { icon: "⭕", color: CUTE.purple },
   n6: { icon: "🛢️", color: CUTE.cyan },
 };

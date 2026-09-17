@@ -136,40 +136,43 @@ function fmt(v) { return Number.isInteger(v) ? String(v) : v.toFixed(2).replace(
 // ---------------------------------------------------------------------------
 const R_MIN = 1, R_MAX = 7;
 
+// 기준 원을 회색으로 깔아 주고, 그 원을 <몇 배로> 키우거나 줄이게 한다.
+// 계산은 없다. 아는 것은 하나뿐이다 —
+//   넓이는 반지름의 <제곱>에 비례하고, 원주는 반지름에 <그대로> 비례한다.
+// 넓이 4배 → 반지름 2배, 넓이 9배 → 반지름 3배, 원주 3배 → 반지름 3배.
+// 이게 「원의 넓이」 단원에서 아이가 몸으로 가져가야 할 원리다.
 function genRound(level) {
   if (level === 1) {
-    // ⭐1 — 넓이를 주고 반지름을 만든다 (☐ = 반지름 × 반지름)
-    const r = randInt(2, 6);
+    // ⭐1 — 넓이를 키운다. 넓이 4배면 반지름 2배.
+    const mult = randInt(2, 3);
+    const base = randInt(1, Math.floor(R_MAX / mult));
     return {
-      ans: r,
-      ask: `넓이가 ${r * r} × 3.14 인 원을 만들어요!`,
-      hint: "넓이 = 반지름 × 반지름 × 3.14",
-      show: `${r} × ${r} × 3.14`,
+      ans: base * mult, base,
+      ask: `이 원의 넓이를 ${mult * mult}배로 만들어요!`,
+      hint: "넓이가 4배면 반지름은 2배 · 9배면 3배",
+      show: `반지름 ${base} × ${mult} = ${base * mult}`,
     };
   }
   if (level === 2) {
-    // ⭐2 — 원주를 주고 반지름을 만든다 (☐ = 지름)
-    const r = randInt(2, 7);
+    // ⭐2 — 원주를 키운다. 원주는 반지름에 그대로 비례한다(제곱이 아니다).
+    // ⭐1 과 나란히 겪어야 "넓이는 제곱, 원주는 그대로"가 구별된다.
+    const mult = randInt(2, 4);
+    const base = randInt(1, Math.floor(R_MAX / mult));
     return {
-      ans: r,
-      ask: `원주가 ${2 * r} × 3.14 인 원을 만들어요!`,
-      hint: "원주 = 지름 × 3.14 · 지름은 반지름의 2배",
-      show: `지름 ${2 * r} → 반지름 ${r}`,
+      ans: base * mult, base,
+      ask: `이 원의 둘레(원주)를 ${mult}배로 만들어요!`,
+      hint: "원주는 반지름과 똑같은 배수로 커져요",
+      show: `반지름 ${base} × ${mult} = ${base * mult}`,
     };
   }
-  // ⭐3 — 넓이의 배수. 반지름이 2배면 넓이는 4배라는 관계를 몸으로 확인한다.
-  // 배수를 먼저 뽑고 그에 맞춰 기준 반지름을 정해야 한다. 기준을 먼저 뽑으면
-  // "반지름 3 원보다 9배" 처럼 <답이 9> 인, 눈금에 없는 문제가 나온다.
-  const k = [4, 9][randInt(0, 1)];
-  const mult = Math.round(Math.sqrt(k));
-  const base = randInt(1, Math.floor(R_MAX / mult));
-  const r = base * mult;
+  // ⭐3 — 줄이기. 넓이를 4분의 1로 하려면 반지름을 절반으로.
+  const mult = randInt(2, 3);
+  const ans = randInt(1, Math.floor(R_MAX / mult));
   return {
-    ans: r,
-    base,
-    ask: `반지름 ${base} 원보다 넓이가 ${k}배인 원을 만들어요!`,
-    hint: "넓이가 4배면 반지름은 2배 · 9배면 3배",
-    show: `반지름 ${base} × ${mult} = ${r}`,
+    ans, base: ans * mult,
+    ask: `이 원의 넓이를 ${mult * mult}분의 1로 만들어요!`,
+    hint: "넓이가 4분의 1이면 반지름은 절반",
+    show: `반지름 ${ans * mult} ÷ ${mult} = ${ans}`,
   };
 }
 
@@ -199,10 +202,8 @@ async function init() {
     title: "원 키우기",
     lines: [
       "<b>양팔을 벌린 너비가 곧 원의 반지름</b>이에요!",
-      mode === "motion"
-        ? "팔을 넓게 벌리면 원이 커지고, 모으면 작아져요."
-        : "<b>좌우로 움직이면</b> 원이 커지고 작아져요.",
-      "<b>3.14는 곱하지 않아도 돼요.</b> 넓이가 16×3.14면 16 = 4×4니까 <b>반지름 4</b>!",
+      "화면의 <b>회색 원</b>을 문제에 맞게 키우거나 줄이면 돼요.",
+      "<b>계산은 없어요.</b> 넓이가 <b>4배</b>면 반지름은 <b>2배</b>, 9배면 3배!",
       "그 반지름으로 <b>잠깐만 멈추면</b> 성공이에요.",
     ],
   });
@@ -279,7 +280,7 @@ function succeed() {
   resolving = true;
   count++;
   const { w, h } = dims;
-  const cx = w * 0.5, cy = h * 0.56;
+  const cx = w * 0.5, cy = h * CIRCLE_Y;
   party.correct(cx, cy, { base: 13 * (isSpurt() ? 2 : 1), elapsedMs: performance.now() - roundAt });
   if (party.combo > 0 && party.combo === party.maxCombo) comboShot.capture(canvas);
   autoDiff.reportCorrect();
@@ -426,18 +427,33 @@ function readBody(dt) {
   }
 }
 
-// 화면에서 반지름 1칸이 몇 px 인가 — 반지름 7 이 화면에 다 들어와야 한다
-function unitPx() { return Math.min(dims.w * 0.040, dims.h * 0.048); }
+// 화면에서 반지름 1칸이 몇 px 인가.
+// 반지름 7 짜리 원이 <문제 배너(~0.30h)와 아래 눈금(0.90h) 사이>에 다 들어와야 한다.
+const CIRCLE_Y = 0.58;
+function unitPx() { return Math.min(dims.w * 0.035, dims.h * 0.034); }
 
 function drawMyCircle(ctx, now) {
   const { w, h } = dims;
-  const cx = w * 0.5, cy = h * 0.56;
+  const cx = w * 0.5, cy = h * CIRCLE_Y;
   const px = unitPx();
   const hit = !resolving && curR === round.ans;
 
+  // 기준 원 — 이 원을 몇 배로 만들지가 문제다. 회색 점선으로 깔아 둔다.
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,255,255,0.85)";
+  ctx.fillStyle = "rgba(255,255,255,0.14)";
+  ctx.lineWidth = fluidPx(dims, 4, { min: 3, max: 6 });
+  ctx.setLineDash([px * 0.28, px * 0.22]);
+  ctx.beginPath(); ctx.arc(cx, cy, round.base * px, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.restore();
+  // 기준 원이 작을 때 이 글씨가 반지름 상자와 겹치지 않도록 자리를 고정한다
+  const bfs = fluidPx(dims, 14, { min: 11, max: 19 });
+  drawChunkyText(ctx, `기준 원의 반지름 ${round.base}`, cx, h * 0.845, bfs, "#fff",
+    { outline: CUTE.ink, outlineWidth: Math.max(2.5, bfs * 0.22) });
+
   // 내가 만들고 있는 원
   ctx.save();
-  ctx.fillStyle = hit ? "rgba(6,214,160,0.30)" : "rgba(155,120,230,0.22)";
+  ctx.fillStyle = hit ? "rgba(6,214,160,0.28)" : "rgba(155,120,230,0.20)";
   ctx.strokeStyle = hit ? CUTE.green : CUTE.purple;
   ctx.lineWidth = fluidPx(dims, 6, { min: 4, max: 9 });
   ctx.beginPath(); ctx.arc(cx, cy, curR * px, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
@@ -468,7 +484,7 @@ function drawMyCircle(ctx, now) {
     ctx.restore();
   }
 
-  // 성공 직후에만 넓이 식을 보여 준다 (배우고 넘어가라고)
+  // 성공 직후에만 식을 보여 준다 (배우고 넘어가라고)
   if (now < okFlash) {
     const efs = fluidPx(dims, 22, { min: 16, max: 30 });
     drawChunkyText(ctx, `✓ ${round.show}`, cx, cy - curR * px - efs * 1.6, efs, PARTY.gold,

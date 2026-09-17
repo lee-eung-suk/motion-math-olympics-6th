@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>비례 배구 · 종목 4</title>
+<title>비례 줄다리기 · 종목 4</title>
 <link rel="stylesheet" href="../css/style.css?v=6">
 </head>
 <body>
@@ -18,16 +18,16 @@
   </div>
 
   <div class="overlay-panel" id="loadingPanel">
-    <h2>🏐 비례 배구</h2>
+    <h2>🪢 비례 줄다리기</h2>
     <p id="loadingText">준비 중…</p>
   </div>
 
   <div class="overlay-panel" id="rulePanel" style="display:none">
     <div class="rule-card">
       <div class="rule-head">
-        <div class="rule-char">🏐</div>
+        <div class="rule-char">🪢</div>
         <div>
-          <h2 class="rule-title">비례 배구</h2>
+          <h2 class="rule-title">비례 줄다리기</h2>
         </div>
       </div>
       <ul class="rule-list"></ul>
@@ -53,9 +53,9 @@
   <div class="overlay-panel" id="resultPanel" style="display:none">
     <div id="podium"></div>
     <div class="result-stats">
-      <div class="stat-box"><div class="num" id="statCount">0점</div><div class="label">득점</div></div>
+      <div class="stat-box"><div class="num" id="statCount">0점</div><div class="label">나눈 줄</div></div>
       <div class="stat-box"><div class="num" id="statBest">0점</div><div class="label">최고 기록</div></div>
-      <div class="stat-box"><div class="num" id="statCombo">0</div><div class="label">최장 랠리</div></div>
+      <div class="stat-box"><div class="num" id="statCombo">0</div><div class="label">최고 콤보</div></div>
     </div>
     <video class="preview" id="previewVideo" controls playsinline style="display:none"></video>
     <div class="action-row">
@@ -91,8 +91,8 @@ import {
 requestWakeLock();
 
 const UNIT = "n4";
-const TITLE = "비례 배구";
-const RECORD_SUFFIX = "점";
+const TITLE = "비례 줄다리기";
+const RECORD_SUFFIX = "개 성공";
 const MEDALS = { bronze: 5, silver: 9, gold: 14 };
 const mode = InputMode.get();
 
@@ -117,50 +117,26 @@ document.getElementById("homeBtn2").addEventListener("click", goHome);
 function randInt(min, max) { return min + Math.floor(Math.random() * (max - min + 1)); }
 function gcd(a, b) { return b === 0 ? a : gcd(b, a % b); }
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
-function red(p, q) { const g = gcd(p, q) || 1; return { p: p / g, q: q / g }; }
-function fracText(p, q) { const r = red(p, q); return r.q === 1 ? String(r.p) : `${r.p}/${r.q}`; }
-function fkey(f) { return `${f.p}/${f.q}`; }
 
 // ---------------------------------------------------------------------------
 // 코트 — 피카츄 배구처럼 <옆에서 본 화면>이다.
 // 왼쪽이 상대 코트, 오른쪽이 내 코트, 가운데가 네트.
 // 상대 코트 바닥은 앞·중간·뒤 세 구역으로 나뉘고 각 구역에 분수가 적혀 있다.
 // ---------------------------------------------------------------------------
-const GROUND = 0.80;        // 바닥
-const NET_TOP = 0.50;       // 네트 꼭대기
-const HIT_Y = 0.62;         // 셔틀콕이 이 높이로 내려오면 라켓에 닿는다
-
-function groundY() { return dims.h * GROUND; }
-function netX() { return dims.w * 0.5; }
-// 상대 코트 세 구역 (네트에서 먼 쪽이 "뒤")
-function zoneRects() {
-  const { w } = dims;
-  const left = w * 0.04, right = w * 0.47;
-  const zw = (right - left) / 3;
-  return [
-    { key: "back", x0: left, x1: left + zw },                 // 뒤 — 점프해서 멀리
-    { key: "mid", x0: left + zw, x1: left + zw * 2 },          // 중간 — 그냥 치기
-    { key: "front", x0: left + zw * 2, x1: right },            // 앞 — 낮게 놓기
-  ];
-}
-// 조준 방식 — 예전에는 <때리는 순간의 공 높이>였다. 배구로는 맞는 말이지만
-// 화면에 보이지 않는 규칙이라 아이가 배울 수가 없었다.
-// 이제 조준은 <내가 어디에 서 있느냐>다. 네트 가까이 서면 짧게 앞으로,
-// 뒤로 물러서면 길게 뒤로 넘어간다. 코트에 선이 그어져 있으니 눈으로 확인된다.
+// ---------------------------------------------------------------------------
+// 「비례 줄다리기」
 //
-// 공은 세터가 <내가 선 자리로> 올려 준다(궤도가 나를 따라온다). 그래야
-// "공을 쫓아가는 자리"와 "겨누려는 자리"가 서로 싸우지 않는다.
-const MY_LEFT = 0.53, MY_RIGHT = 0.96;
-function zoneForMyX(x) {
-  const t = (x - dims.w * MY_LEFT) / (dims.w * (MY_RIGHT - MY_LEFT));
-  return t < 0.34 ? 2 : t < 0.67 ? 1 : 0;    // 앞 / 가운데 / 뒤
-}
-const ZONE_LABEL = ["뒤로", "가운데", "앞으로"];
-const MY_ZONE_LABEL = ["뒤로", "가운데", "앞으로"];
+// 예전에는 배구 코트에서 <답이 적힌 칸>으로 공을 내리꽂게 했다. 그런데 조준이
+// "어디에 서 있느냐"일 뿐이어서, 비례배분과 몸의 움직임이 아무 상관이 없었다.
+// 계산해서 답을 확인하고 그 자리를 <지목>하는 것뿐이었다.
+//
+// 이제는 구슬 한 줄을 놓고 <내 몸이 곧 경계선>이다. 자리를 옮기면 왼쪽과 오른쪽
+// 개수가 함께 바뀐다. 아이는 몸을 움직이면서 "전체를 몇 묶음으로 나눠 몇 묶음씩"을
+// 눈으로 본다. 비례배분의 뜻 그 자체가 몸의 위치가 된다.
+// ---------------------------------------------------------------------------
+const LINE_LEFT = 0.10, LINE_RIGHT = 0.90;   // 구슬 줄이 놓이는 가로 범위
+const ROW_Y = 0.56;                          // 구슬 줄의 높이
 
-// ---------------------------------------------------------------------------
-// 문제 만들기 — 세 구역에 붙일 분수 세 개
-// ---------------------------------------------------------------------------
 function pickRatio(maxParts) {
   for (let i = 0; i < 200; i++) {
     let a = randInt(1, 5), b = randInt(1, 5);
@@ -171,64 +147,37 @@ function pickRatio(maxParts) {
   return { a: 1, b: 2 };
 }
 
-// 숫자 뒤에 붙는 「을/를」 — 12는 "십이"라 받침이 없어 <12를>가 맞다.
-// 항상 "을"로 쓰면 6학년 화면에 "12을 3:1로 나누면"처럼 틀린 말이 뜬다.
-// 끝자리를 한글로 읽었을 때 받침이 있는가로 고른다 (영·일·삼·육·칠·팔·십은 받침 있음).
+// 숫자 뒤에 붙는 「을/를」과 「로/으로」 — 끝자리를 한글로 읽었을 때의 받침으로 고른다.
+// 그냥 "을"로 박아 두면 "12을 3:1로 나누면" 처럼 틀린 말이 화면에 뜬다.
 const HAS_BATCHIM = [true, true, false, true, false, false, true, true, true, false];
 function eul(n) { return HAS_BATCHIM[n % 10] ? "을" : "를"; }
-// 「로/으로」 — 받침이 없거나 ㄹ 받침이면 "로", 나머지는 "으로".
-// 3은 "삼"이라 <3으로>가 맞고, 1은 "일"이라 <1로>가 맞다.
 const RO_PLAIN = [false, true, true, false, true, true, false, true, true, true];
 function ro(n) { return RO_PLAIN[n % 10] ? "로" : "으로"; }
 
 function genRound(level) {
-  // ⭐1은 전체를 12 이하로 묶는다 — 한 칸이 화면에서 충분히 크고, 암산으로 끝난다.
-  // ⭐2·⭐3도 24는 너무 컸다. 18로 낮춘다.
+  // ⭐1은 전체 12 이하 — 한 칸이 화면에서 충분히 크고 눈으로 셀 수 있다
   const maxTotal = level === 1 ? 12 : 18;
   const maxParts = level === 1 ? 4 : 6;
   const { a, b } = pickRatio(maxParts);
   const parts = a + b;
   const k = randInt(2, Math.max(2, Math.floor(maxTotal / parts)));
   const total = parts * k;
-  const answer = level === 3 ? b * k : a * k;
 
-  let text, hint;
-  if (level === 1) {
-    text = `${total}${eul(total)} ${a} : ${b}${ro(b)} 나누면 왼쪽은?`;
-    hint = `전체를 ${parts}칸으로 나누고 왼쪽 ${a}칸이에요`;
-  } else if (level === 2) {
-    // 배수 m 은 전체 수를 넘지 않게 잡는다.
-    // 예전에는 m 을 그냥 2~4에서 뽑아서 "8을 12 : 4로 나누면" 처럼
-    // <비의 한쪽이 전체보다 큰> 문제가 나왔다. 답은 구할 수 있지만 아이에게는 말이 안 된다.
+  if (level === 2) {
+    // ⭐2 — 비를 간단히 해야 한다. 배수는 전체를 넘지 않게 잡는다.
     const m = randInt(2, Math.max(2, Math.min(4, k)));
-    text = `${total}${eul(total)} ${a * m} : ${b * m}${ro(b * m)} 나누면 왼쪽은?`;
-    hint = `${a * m} : ${b * m}${eul(b * m)} 간단히 하면 ${a} : ${b}예요`;
-  } else {
-    // ⭐3 — 오른쪽(작은 쪽/큰 쪽)을 묻는다. 예전에는 비례식(a:b = ☐:c)이었는데
-    // 그건 <비례식> 단원이라 이 종목의 <비례배분>과 다른 내용이었다.
-    text = `${total}${eul(total)} ${a} : ${b}${ro(b)} 나누면 오른쪽은?`;
-    hint = `전체를 ${parts}칸으로 나누고 오른쪽 ${b}칸이에요`;
+    return {
+      total, parts, each: k, left: a * k,
+      text: `${total}${eul(total)} ${a * m} : ${b * m}${ro(b * m)} 나누어요!`,
+      hint: `${a * m} : ${b * m}${eul(b * m)} 간단히 하면 ${a} : ${b}예요`,
+      show: `${total} ÷ ${parts} = ${k} · 왼쪽 ${a}묶음 = ${a * k}`,
+    };
   }
-
-  // 오답은 아이들이 실제로 하는 실수 — 비를 뒤집기, 반으로 나누기, 한 칸 어긋나기
-  const cand = [b * k, Math.round(total / 2), answer + k, answer - k, total - answer];
-  const seen = new Set([answer]);
-  const picks = [];
-  for (const v of shuffle(cand)) {
-    if (v <= 0 || v >= total || seen.has(v)) continue;
-    seen.add(v); picks.push(v);
-    if (picks.length >= 2) break;
-  }
-  while (picks.length < 2) { const v = randInt(1, total - 1); if (!seen.has(v)) { seen.add(v); picks.push(v); } }
-
   return {
-    // ⭐1은 전체를 묶음 그림으로도 보여 준다 — 세면 답이 나오게.
-    // 기초학력 학생에게 "전체를 몇 칸으로 나눈다"는 말만으로는 그림이 안 그려진다.
-    dots: level === 1 ? { total, parts, each: total / parts, a, b } : null,
-    text, hint, ans: { p: answer, q: 1 },
-    cells: shuffle([{ f: { p: answer, q: 1 }, ok: true },
-                    { f: { p: picks[0], q: 1 }, ok: false },
-                    { f: { p: picks[1], q: 1 }, ok: false }]),
+    total, parts, each: k, left: a * k,
+    text: `${total}${eul(total)} ${a} : ${b}${ro(b)} 나누어요!`,
+    hint: `전체를 ${parts}묶음으로 나누고 왼쪽이 ${a}묶음이에요`,
+    show: `${total} ÷ ${parts} = ${k} · 왼쪽 ${a}묶음 = ${a * k}`,
   };
 }
 
@@ -255,14 +204,13 @@ async function init() {
 
   await showRuleCard({
     unit: UNIT,
-    title: "비례 배구",
+    title: "비례 줄다리기",
     lines: [
-      "상대 코트 <b>세 칸</b>에 숫자가 적혀 있어요. 정답 칸으로 내리꽂으세요!",
-      mode === "motion"
-        ? "<b>어디에 서느냐가 조준</b>이에요. 네트 가까이=앞으로, 뒤로 물러서면=뒤로!"
-        : "<b>좌우로 움직이는 게 조준</b>이에요. 네트 가까이=앞으로, 멀리=뒤로!",
-      mode === "motion" ? "공이 내려오면 <b>점프해서</b> 때려요!" : "공이 내려오면 <b>클릭해서</b> 때려요!",
-      "공은 <b>내가 선 자리로</b> 올라와요. 안 때리면 상대 점수!",
+      "구슬 한 줄을 <b>비율대로 나누는</b> 게임이에요!",
+      mode === "motion" ? "<b>내 몸이 곧 경계선</b>이에요. 좌우로 걸어가 보세요."
+        : "<b>커서가 곧 경계선</b>이에요. 좌우로 움직여 보세요.",
+      "<b>2 : 1</b> 이면 전체를 <b>3묶음</b>으로 나누고 왼쪽이 <b>2묶음</b>!",
+      "맞는 자리에서 <b>잠깐만 멈추면</b> 성공이에요.",
     ],
   });
 
@@ -277,17 +225,11 @@ let state = "loading";
 const holdFill = document.getElementById("holdFill");
 const startGate = new StartGate(mode, holdFill);
 
-let autoDiff, count, oppScore, playEndAt;
-let round = null, roundAt;
-let shuttle = null;            // { x, y, vx, vy, side:"me"|"opp", zone }
-let me = { x: 0, jumpUntil: 0, swing: 0 };
-let opp = { x: 0, target: 0, mood: "idle" };
-let rally = 0, maxRally = 0;
-let speedUp = 0;      // 연속 성공 횟수 — 이만큼만 빨라진다
-let firstServe = true;  // 첫 서브는 beginPlay 가 만든 문제를 그대로 쓴다
-let missStreak = 0;   // 같은 문제를 몇 번 놓쳤는가 (힌트를 켜는 기준)
-let paused = 0;                // 득점 후 잠깐 멈춤
-let bannerMsg = null;
+let autoDiff, count, playEndAt;
+let round = null, roundAt, resolving = false;
+let lineX = 0;        // 지금 내 몸이 만든 경계선
+let holdMs = 0;
+let okFlash = 0;
 let confetti = [], sparks = [];
 const shake = new ScreenShake();
 let recorder, comboShot, fallbackShot, autoRec, recordedBlob = null;
@@ -295,24 +237,10 @@ const recIndicator = document.getElementById("recIndicator");
 let cursors = [];
 let lastFrameAt = 0;
 
-// 스윙 입력 — 점프(모션) 또는 탭(터치·마우스). 누르는 "순간"이 곧 조준이다.
-let pressSeen = false;
-function swingNow() {
-  if (mode === "motion") {
-    const j = motion.jump();
-    if (j && j.power > 0.16) { me.jumpUntil = performance.now() + 420; return true; }
-    return false;
-  }
-  if (!pointerInput) return false;
-  if (pointerInput.consumeJustDown()) pressSeen = true;
-  if (pressSeen && !pointerInput.down) { pressSeen = false; return true; }
-  return false;
-}
-
 // party 의 판정 문구가 화면 끝에서 잘리지 않게 안쪽으로 당긴다
 function safeX(x) { return Math.max(dims.w * 0.26, Math.min(dims.w * 0.74, x)); }
 
-// ── 연속 성공 자막 ── 잘하고 있다는 게 눈에 보여야 계속 몸을 쓴다
+// ── 연속 성공 자막 ──
 let streakMsg = null;
 function noteStreak(n) {
   if (n >= 3) streakMsg = { text: n >= 10 ? `🔥 ${n}연속 대단해요!` : n >= 5 ? `⚡ ${n}연속!` : `${n}연속!`, until: performance.now() + 1100 };
@@ -323,72 +251,76 @@ function drawStreak(ctx) {
   const fs = fluidPx(dims, 30, { min: 21, max: 42 });
   const puls = 1 + Math.sin(performance.now() / 110) * 0.09;
   ctx.save();
-  ctx.translate(w * 0.5, h * 0.45); ctx.scale(puls, puls);
+  ctx.translate(w * 0.5, h * 0.40); ctx.scale(puls, puls);
   drawChunkyText(ctx, streakMsg.text, 0, 0, fs, PARTY.gold,
     { outline: CUTE.ink, outlineWidth: Math.max(4, fs * 0.22) });
   ctx.restore();
 }
 
-// ── 도움 화살표 ── 같은 문제를 두 번 놓치면 정답 자리를 알려 준다.
-// 계속 틀리기만 하면 아이는 포기한다. "한 번은 맞혀 보는 경험"이 있어야 다음 문제를 시도한다.
+// ── 도움 표시 ── 두 번 연속 틀리면 묶음 경계를 회색으로 알려 준다
+let missStreak = 0;
 function helpOn() { return missStreak >= 2; }
-function drawHelp(ctx) {
-  if (!helpOn() || !round) return;
-  const zi = round.cells.findIndex((c) => c.ok);
-  if (zi < 0) return;
-  const z = zoneRects()[zi];
-  const { h } = dims;
-  const cx = (z.x0 + z.x1) / 2;
-  const t = (performance.now() % 900) / 900;
-  const gy = groundY();
-  ctx.save();
-  ctx.globalAlpha = 0.85;
-  ctx.strokeStyle = PARTY.gold;
-  ctx.lineWidth = fluidPx(dims, 7, { min: 5, max: 11 });
-  ctx.lineCap = "round"; ctx.lineJoin = "round";
-  const ay = gy - h * 0.09 - t * h * 0.02;
-  ctx.beginPath();
-  ctx.moveTo(cx, ay - h * 0.05); ctx.lineTo(cx, ay);
-  ctx.moveTo(cx - h * 0.022, ay - h * 0.022); ctx.lineTo(cx, ay); ctx.lineTo(cx + h * 0.022, ay - h * 0.022);
-  ctx.stroke();
-  ctx.restore();
-  const fs = fluidPx(dims, 18, { min: 13, max: 24 });
-  drawChunkyText(ctx, "여기예요!", cx, ay - h * 0.075, fs, PARTY.gold,
-    { outline: CUTE.ink, outlineWidth: Math.max(3, fs * 0.24) });
-}
 
 function isSpurt() { return playEndAt - performance.now() < 10000; }
-// 랠리가 이어질수록 셔틀콕이 빨라진다
-function flightT() {
-  // 예전엔 1.75초에서 시작해 랠리마다 빨라졌다. 기초학력 학생은 그 안에 계산을 못 끝낸다.
-  // 게다가 <틀려도 rally 가 올라> 실수할수록 더 빨라지는 거꾸로 된 구조였다.
-  // 이제 시작 속도를 넉넉히 주고, 빨라지는 건 <연속으로 맞힌 횟수(speedUp)>만 따른다.
-  const base = autoDiff.level === 1 ? 3.4 : autoDiff.level === 2 ? 2.8 : 2.3;
-  return Math.max(1.3, base - speedUp * 0.12) * (isSpurt() ? 0.92 : 1);
+function roundMs() {
+  return autoDiff.level === 1 ? 13000 : autoDiff.level === 2 ? 11000 : 9500;
 }
 
-// 출발점에서 목표점까지 T초에 닿는 포물선을 만든다.
-//
-// 중력을 고정값으로 두면, 비행 시간을 늘렸을 때 최고점이 화면 위로 한참 벗어나
-// 공이 몇 초씩 안 보인다(느린 난이도일수록 더 심하다).
-// 그래서 중력을 T에 맞춰 정해, <비행 시간과 무관하게 최고점이 화면 안>에 오게 한다.
-function launch(x, y, tx, ty, T) {
-  // 최고점이 문제 배너(0.13h~0.25h) 뒤로 들어가지 않게 낮춰 잡은 값
-  const g = (dims.h * 3.0) / (T * T);
-  return { x, y, vx: (tx - x) / T, vy: (ty - y - 0.5 * g * T * T) / T, g };
+const HOLD_MS = 360;   // 맞는 자리에 이만큼 서 있으면 성공
+const NEXT_MS = 550;
+
+// 구슬 i 의 화면 x
+function marbleX(i, total) {
+  const { w } = dims;
+  const x0 = w * LINE_LEFT, x1 = w * LINE_RIGHT;
+  return total <= 1 ? (x0 + x1) / 2 : x0 + ((x1 - x0) * i) / (total - 1);
 }
 
-function newRound(serveOnly) {
-  if (!serveOnly) { round = genRound(autoDiff.level); rally = 0; }
-  const { w, h } = dims;
-  const T = flightT();
-  const sx = w * 0.20, sy = h * 0.66;
-  opp.x = sx; opp.target = sx;
-  // 공은 세터가 <내가 선 자리로> 올려 준다. 궤도가 나를 따라오므로
-  // "공을 쫓아가는 자리"와 "겨누려는 자리"가 서로 싸우지 않는다.
-  const v = launch(sx, sy, me.x, groundY() - h * 0.02, T);
-  shuttle = { ...v, side: "opp", zone: -1, arriveAt: performance.now() + T * 1000 };
+// 경계선보다 왼쪽에 있는 구슬 개수
+function leftCount(lineX) {
+  let n = 0;
+  for (let i = 0; i < round.total; i++) if (marbleX(i, round.total) < lineX) n++;
+  return n;
+}
+
+function newRound() {
+  round = genRound(autoDiff.level);
+  round.ms = roundMs();
+  holdMs = 0;
+  resolving = false;
+  motion.reset();
   roundAt = performance.now();
+}
+
+function succeed() {
+  resolving = true;
+  count++;
+  const { w, h } = dims;
+  party.correct(safeX(lineX), h * ROW_Y, { base: 13 * (isSpurt() ? 2 : 1), elapsedMs: performance.now() - roundAt });
+  if (party.combo > 0 && party.combo === party.maxCombo) comboShot.capture(canvas);
+  autoDiff.reportCorrect();
+  missStreak = 0;
+  noteStreak(party.combo);
+  autoRec.trigger();
+  shake.trigger(10, 220);
+  if (!isMuted()) sound.hit("perfect");
+  spawnSparkles(sparks, lineX, h * ROW_Y, 32, ["#fff", PARTY.gold, CUTE.orange]);
+  if (party.combo > 0 && party.combo % 5 === 0) {
+    spawnConfetti(confetti, lineX, h * ROW_Y, 44);
+    if (!isMuted()) sound.fever();
+  }
+  okFlash = performance.now() + 1000;
+  setTimeout(() => { if (state === "playing") newRound(); }, NEXT_MS);
+}
+
+function timeUp() {
+  if (resolving) return;
+  resolving = true;
+  party.wrong(dims.w * 0.5, dims.h * 0.42, `정답은 왼쪽 ${round.left}개`);
+  autoDiff.reportWrong();
+  missStreak++;
+  if (!isMuted()) sound.wrong();
+  setTimeout(() => { if (state === "playing") newRound(); }, NEXT_MS);
 }
 
 function startCountdown() {
@@ -416,18 +348,13 @@ function beginPlay() {
   state = "playing";
   const prev = HighScore.get(UNIT);
   autoDiff = new AutoDifficulty(levelFromUrl(AutoDifficulty.startLevelFromHighScore(prev)));
-  count = 0; oppScore = 0; rally = 0; maxRally = 0;
-  speedUp = 0; missStreak = 0;
+  count = 0; missStreak = 0;
   party.reset();
   confetti = []; sparks = [];
   playEndAt = performance.now() + 60000;
   lastFrameAt = 0;
-  paused = 0; bannerMsg = null;
-  me.x = dims.w * 0.75;
-  round = genRound(1);
-  firstServe = true;
-  shuttle = null;
-  paused = performance.now() + 2000;   // 문제를 읽고 자리 잡을 틈을 준다
+  lineX = dims.w * 0.5;
+  newRound();
 
   recorder = new ClipRecorder(canvas, sound, 24);
   recorder.prepare();
@@ -444,77 +371,6 @@ function beginPlay() {
   });
 }
 
-// ── 내가 받아친다 ──
-function hitByMe() {
-  const zi = zoneForMyX(me.x);
-  const z = zoneRects()[zi];
-  const tx = (z.x0 + z.x1) / 2;
-  // 내리꽂는 공은 빠르게 — 올라오는 공(flightT)만큼 느리면 한 점에 8초씩 걸린다
-  const v = launch(shuttle.x, shuttle.y, tx, groundY() - dims.h * 0.02, 0.75);
-  shuttle = { ...v, side: "me", zone: zi };
-  me.swing = 1;
-  rally++;
-  if (rally > maxRally) maxRally = rally;
-  opp.target = tx;
-  if (!isMuted()) sound.swoosh();
-  shake.trigger(zi === 0 ? 9 : 5, 140);
-  spawnSparkles(sparks, shuttle.x, shuttle.y, 10, ["#fff", PARTY.gold]);
-}
-
-// ── 셔틀콕이 상대 코트에 닿았다 ──
-function landOnOpponent() {
-  const ok = round.cells[shuttle.zone].ok;
-  const x = shuttle.x, y = groundY();
-  if (ok) {
-    count++;
-    const perfect = rally <= 1 && missStreak === 0;
-    const base = (perfect ? 16 : 10 + Math.min(8, rally * 2)) * (isSpurt() ? 2 : 1);
-    party.correct(safeX(x), y, { base, elapsedMs: 1200 });
-    if (party.combo > 0 && party.combo === party.maxCombo) comboShot.capture(canvas);
-    autoDiff.reportCorrect();
-    autoRec.trigger();
-    speedUp++;
-    missStreak = 0;
-    noteStreak(party.combo);
-    shake.trigger(12, 240);
-    if (!isMuted()) sound.hit("perfect");
-    spawnSparkles(sparks, x, y, 34, ["#fff", PARTY.gold, CUTE.red]);
-    spawnConfetti(confetti, x, y - dims.h * 0.1, 40);
-    opp.mood = "sad";
-    bannerMsg = { text: perfect ? "✨ 퍼펙트! 한 번에 성공!" : rally >= 4 ? `🔥 ${rally}구 랠리 끝에 득점!` : "득점!", color: PARTY.gold, until: performance.now() + 1300 };
-    shuttle = null;
-    paused = performance.now() + 900;
-  } else {
-    // 틀린 구역 — 상대가 받아쳐서 랠리가 이어진다. 같은 문제로 다시 도전!
-    opp.mood = "happy";
-    missStreak++;
-    const { w, h } = dims;
-    const T = flightT();
-    // arriveAt 을 빠뜨리면 다음 프레임에서 vx 가 NaN 이 되어 공이 사라진다
-    const v = launch(shuttle.x, groundY() - h * 0.10, me.x, groundY() - h * 0.02, T);
-    shuttle = { ...v, side: "opp", zone: -1, arriveAt: performance.now() + T * 1000 };
-    rally++;
-    if (rally > maxRally) maxRally = rally;
-    if (!isMuted()) sound.pop();
-    bannerMsg = { text: "상대가 받아쳤어요!", color: CUTE.blue, until: performance.now() + 900 };
-  }
-}
-
-// ── 내가 놓쳤다 ──
-function missed() {
-  oppScore++;
-  speedUp = Math.max(0, speedUp - 1);
-  missStreak++;
-  party.wrong(safeX(shuttle.x), groundY() - dims.h * 0.06, `정답은 ${fracText(round.ans.p, round.ans.q)}`);
-  autoDiff.reportWrong();
-  if (!isMuted()) sound.wrong();
-  shake.trigger(7, 200);
-  opp.mood = "happy";
-  bannerMsg = { text: "놓쳤어요! 상대 득점", color: CUTE.red, until: performance.now() + 1200 };
-  shuttle = null;
-  paused = performance.now() + 900;
-}
-
 function endGame() {
   state = "result";
   const { medal, label } = medalFor(count, MEDALS);
@@ -523,10 +379,10 @@ function endGame() {
   if (!prev || count >= prev.count) {
     HighScore.set(UNIT, { count, bestLevel: autoDiff.level, label: `${medal} ${count}${RECORD_SUFFIX}`, at: Date.now() });
   }
-  renderPodium({ unit: UNIT, medal, label, coins: party.coins, maxCombo: maxRally, count, suffix: RECORD_SUFFIX, best });
-  document.getElementById("statCount").textContent = count + "점";
-  document.getElementById("statBest").textContent = best + "점";
-  document.getElementById("statCombo").textContent = "🏐" + maxRally + "구";
+  renderPodium({ unit: UNIT, medal, label, coins: party.coins, maxCombo: party.maxCombo, count, suffix: RECORD_SUFFIX, best });
+  document.getElementById("statCount").textContent = count + "개";
+  document.getElementById("statBest").textContent = best + "개";
+  document.getElementById("statCombo").textContent = "🔥" + party.maxCombo;
 
   const shot = comboShot.captured ? comboShot : fallbackShot;
   const previewVideo = document.getElementById("previewVideo");
@@ -538,10 +394,10 @@ function endGame() {
   }
   document.getElementById("savePhotoBtn").onclick = async () => {
     const blob = await shot.toBlob((c, w, h) => drawPhotoOverlay(c, w, h, { title: TITLE, record: count + RECORD_SUFFIX, medal }));
-    downloadBlob(blob, `수학체육올림픽6_비례배구_${formatFileTimestamp()}.png`);
+    downloadBlob(blob, `수학체육올림픽6_비례줄다리기_${formatFileTimestamp()}.png`);
   };
   document.getElementById("saveVideoBtn").onclick = () => {
-    if (recordedBlob) downloadBlob(recordedBlob, `수학체육올림픽6_비례배구_${formatFileTimestamp()}.${recorder.extension}`);
+    if (recordedBlob) downloadBlob(recordedBlob, `수학체육올림픽6_비례줄다리기_${formatFileTimestamp()}.${recorder.extension}`);
   };
   document.getElementById("resultPanel").style.display = "flex";
   if (!isMuted()) sound.success();
@@ -568,7 +424,7 @@ function goReady() {
   }, 500);
 }
 
-// ── 내 위치 ──
+// ── 내 몸이 경계선이다 ──
 function readBody(dt) {
   const { w } = dims;
   let px = null;
@@ -579,201 +435,87 @@ function readBody(dt) {
     px = cursors[0].x;
   }
   if (px !== null) {
-    const target = Math.max(w * 0.53, Math.min(w * 0.96, px));
-    me.x += (target - me.x) * Math.min(1, dt * 11);
+    const target = Math.max(w * 0.04, Math.min(w * 0.96, px));
+    lineX += (target - lineX) * Math.min(1, dt * 12);
   }
-  me.swing = Math.max(0, me.swing - dt * 3.5);
 }
 
-// ── 그리기 ──
-function drawCourt(ctx) {
+// ── 구슬 줄과 경계선 ──
+function drawRope(ctx, now) {
   const { w, h } = dims;
-  const gy = groundY(), nx = netX();
+  const y = h * ROW_Y;
+  const r = Math.min(w * 0.026, h * 0.038);
+  const left = leftCount(lineX);
+  const hit = !resolving && left === round.left;
+
+  // 줄
   ctx.save();
-  // 바닥
-  ctx.fillStyle = "rgba(255,255,255,0.13)";
-  ctx.fillRect(0, gy, w, h - gy);
-  ctx.strokeStyle = "rgba(255,255,255,0.9)";
-  ctx.lineWidth = fluidPx(dims, 4, { min: 3, max: 6 });
-  ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(w, gy); ctx.stroke();
+  ctx.strokeStyle = "rgba(255,255,255,0.55)";
+  ctx.lineWidth = fluidPx(dims, 6, { min: 4, max: 9 });
+  ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(w * LINE_LEFT - r, y); ctx.lineTo(w * LINE_RIGHT + r, y); ctx.stroke();
   ctx.restore();
 
-  // 상대 코트 세 구역
-  const zs = zoneRects();
-  const aim = shuttle && shuttle.side === "opp" ? zoneForMyX(me.x) : -1;
-  const fs = Math.min(fluidPx(dims, 30, { min: 20, max: 42 }), (zs[0].x1 - zs[0].x0) * 0.42);
-  for (let i = 0; i < zs.length; i++) {
-    const z = zs[i];
-    const hot = i === aim && shuttle && shuttle.side === "opp";
+  // 두 번 연속 틀리면 묶음 경계를 회색 점선으로 알려 준다
+  if (helpOn() && !resolving) {
     ctx.save();
-    ctx.fillStyle = hot ? "rgba(255,212,59,0.55)" : "rgba(255,255,255,0.10)";
-    ctx.fillRect(z.x0, gy - h * 0.055, z.x1 - z.x0, h * 0.055);
-    ctx.strokeStyle = hot ? PARTY.gold : "rgba(255,255,255,0.7)";
-    ctx.lineWidth = hot ? fluidPx(dims, 5, { min: 4, max: 8 }) : fluidPx(dims, 2, { min: 1.5, max: 3 });
-    ctx.strokeRect(z.x0, gy - h * 0.055, z.x1 - z.x0, h * 0.055);
+    ctx.strokeStyle = "rgba(255,255,255,0.5)";
+    ctx.lineWidth = fluidPx(dims, 2.5, { min: 2, max: 4 });
+    ctx.setLineDash([6, 6]);
+    for (let g = 1; g < round.parts; g++) {
+      const i = g * round.each;
+      const x = (marbleX(i - 1, round.total) + marbleX(i, round.total)) / 2;
+      ctx.beginPath(); ctx.moveTo(x, y - r * 2.4); ctx.lineTo(x, y + r * 2.4); ctx.stroke();
+    }
     ctx.restore();
-    drawChunkyText(ctx, fracText(round.cells[i].f.p, round.cells[i].f.q), (z.x0 + z.x1) / 2, gy - h * 0.0275,
-      fs, "#fff", { outline: CUTE.ink, outlineWidth: Math.max(3, fs * 0.22) });
   }
 
-  // 네트
+  // 구슬 — 경계선 왼쪽은 파랑, 오른쪽은 주황
+  for (let i = 0; i < round.total; i++) {
+    const x = marbleX(i, round.total);
+    drawSticker(ctx, x, y, r, x < lineX ? CUTE.blue : CUTE.orange, { lineWidth: Math.max(2, r * 0.22) });
+  }
+
+  // 경계선 = 내 몸
   ctx.save();
-  ctx.strokeStyle = "rgba(255,255,255,0.95)";
-  ctx.lineWidth = fluidPx(dims, 4, { min: 3, max: 6 });
-  ctx.beginPath(); ctx.moveTo(nx, gy); ctx.lineTo(nx, h * NET_TOP); ctx.stroke();
-  ctx.globalAlpha = 0.45;
-  ctx.lineWidth = fluidPx(dims, 1.6, { min: 1, max: 2.4 });
-  const cell = Math.max(9, h * 0.018);
-  for (let y = h * NET_TOP; y < gy; y += cell) {
-    ctx.beginPath(); ctx.moveTo(nx - cell * 1.6, y); ctx.lineTo(nx + cell * 1.6, y); ctx.stroke();
-  }
+  ctx.strokeStyle = hit ? CUTE.green : PARTY.gold;
+  ctx.lineWidth = fluidPx(dims, 6, { min: 4, max: 9 });
+  ctx.beginPath(); ctx.moveTo(lineX, y - r * 3.6); ctx.lineTo(lineX, y + r * 3.6); ctx.stroke();
   ctx.restore();
-  drawStickerRect(ctx, nx, h * NET_TOP - fluidPx(dims, 7, { min: 5, max: 10 }), fluidPx(dims, 26, { min: 18, max: 34 }),
-    fluidPx(dims, 10, { min: 7, max: 14 }), 4, CUTE.cream, { lineWidth: 2, drop: 2 });
-}
+  const pr = fluidPx(dims, 21, { min: 15, max: 29 });
+  drawSticker(ctx, lineX, y - r * 4.8, pr * 0.85, hit ? CUTE.green : CUTE.cream, { lineWidth: Math.max(3, pr * 0.14) });
+  drawChunkyText(ctx, "🧍", lineX, y - r * 4.8, pr, CUTE.ink, { outline: "#fff", outlineWidth: 2 });
 
-// ⭐1의 묶음 그림 — 전체 구슬을 (a+b)묶음으로 갈라 놓는다.
-// "12를 1:2로 나누면"이라는 말만으로는 기초학력 학생에게 아무 그림이 안 그려진다.
-// 묶음이 보이면 한 묶음을 세는 것만으로 답이 나온다.
-function drawDots(ctx, top) {
-  if (!round.dots) return;
-  const { w, h } = dims;
-  const d = round.dots;
-  const r = fluidPx(dims, 9, { min: 6, max: 13 });
-  const gapDot = r * 2.5, gapGroup = r * 2.6;
-  const rowW = d.total * gapDot + (d.parts - 1) * gapGroup;
-  let x = w * 0.5 - rowW / 2 + r;
-  const y = top + r * 2.4;
-  for (let g = 0; g < d.parts; g++) {
-    for (let i = 0; i < d.each; i++) {
-      drawSticker(ctx, x, y, r, g < d.a ? PARTY.gold : CUTE.cream, { lineWidth: Math.max(2, r * 0.26) });
-      x += gapDot;
-    }
-    if (g < d.parts - 1) {
-      ctx.save();
-      ctx.strokeStyle = "rgba(255,255,255,0.85)";
-      ctx.lineWidth = Math.max(2, r * 0.3);
-      ctx.setLineDash([r * 0.5, r * 0.45]);
-      ctx.beginPath();
-      ctx.moveTo(x - gapDot + gapGroup / 2, y - r * 1.9);
-      ctx.lineTo(x - gapDot + gapGroup / 2, y + r * 1.9);
-      ctx.stroke();
-      ctx.restore();
-      x += gapGroup;
-    }
-  }
-  const fs = fluidPx(dims, 13, { min: 10, max: 18 });
-  drawChunkyText(ctx, `${d.parts}묶음으로 나눴어요 · 한 묶음 ${d.each}개`, w * 0.5, y + r * 3.0, fs, "#fff",
-    { outline: CUTE.ink, outlineWidth: Math.max(2.5, fs * 0.22) });
-}
+  // 양쪽 개수 — 목표는 알려 주지 않는다. 지금 몇 개인지만 보여 준다.
+  const fs = fluidPx(dims, 28, { min: 20, max: 38 });
+  const ly = y + r * 5.4;
+  drawStickerRect(ctx, w * 0.26, ly, fs * 4.2, fs * 1.8, fs * 0.45,
+    hit ? CUTE.green : CUTE.blue, { lineWidth: Math.max(3, fs * 0.13), drop: fs * 0.15 });
+  drawChunkyText(ctx, `${left}개`, w * 0.26, ly, fs, "#fff",
+    { outline: CUTE.ink, outlineWidth: Math.max(3, fs * 0.18) });
+  drawStickerRect(ctx, w * 0.74, ly, fs * 4.2, fs * 1.8, fs * 0.45,
+    hit ? CUTE.green : CUTE.orange, { lineWidth: Math.max(3, fs * 0.13), drop: fs * 0.15 });
+  drawChunkyText(ctx, `${round.total - left}개`, w * 0.74, ly, fs, "#fff",
+    { outline: CUTE.ink, outlineWidth: Math.max(3, fs * 0.18) });
 
-// 내 코트에 그은 세 칸 — 어디에 서면 어디로 가는지가 눈에 보여야 한다
-function drawMyZones(ctx) {
-  const { w, h } = dims;
-  const gy = groundY();
-  const x0 = w * MY_LEFT, x1 = w * MY_RIGHT;
-  const zw = (x1 - x0) / 3;
-  const here = zoneForMyX(me.x);
-  const fs = fluidPx(dims, 16, { min: 12, max: 22 });
-  for (let i = 0; i < 3; i++) {
-    // 화면 왼쪽부터 앞(2) · 가운데(1) · 뒤(0) 순서다
-    const zi = 2 - i;
-    const bx = x0 + zw * i;
-    const hot = zi === here;
+  // 맞는 자리에 서 있는 동안 차오르는 막대
+  if (hit && holdMs > 0) {
+    const bw = fs * 5.0, bh = fluidPx(dims, 10, { min: 7, max: 15 });
+    const by = y - r * 6.8;
+    drawStickerRect(ctx, lineX, by, bw, bh, bh / 2, "rgba(255,255,255,0.85)", { lineWidth: 2, drop: 0 });
     ctx.save();
-    ctx.fillStyle = hot ? "rgba(255,212,59,0.30)" : "rgba(255,255,255,0.07)";
-    ctx.fillRect(bx, gy - h * 0.035, zw, h * 0.035);
-    ctx.strokeStyle = hot ? PARTY.gold : "rgba(255,255,255,0.5)";
-    ctx.lineWidth = hot ? fluidPx(dims, 4, { min: 3, max: 6 }) : fluidPx(dims, 1.6, { min: 1.2, max: 2.4 });
-    ctx.strokeRect(bx, gy - h * 0.035, zw, h * 0.035);
+    ctx.fillStyle = PARTY.gold;
+    ctx.beginPath();
+    ctx.roundRect(lineX - bw / 2, by - bh / 2, Math.max(bh, bw * (holdMs / HOLD_MS)), bh, bh / 2);
+    ctx.fill();
     ctx.restore();
-    drawChunkyText(ctx, MY_ZONE_LABEL[zi], bx + zw / 2, gy - h * 0.0175, fs,
-      hot ? PARTY.gold : "rgba(255,255,255,0.85)",
-      { outline: CUTE.ink, outlineWidth: Math.max(2.5, fs * 0.22) });
   }
-}
 
-function drawMe(ctx, now) {
-  const { w, h } = dims;
-  const gy = groundY();
-  const jumping = now < me.jumpUntil;
-  const y = gy - (jumping ? h * 0.11 : 0);
-  const r = fluidPx(dims, 26, { min: 19, max: 36 });
-  const bodyH = r * 1.8;
-  ctx.save();
-  ctx.fillStyle = CUTE.orange;
-  ctx.strokeStyle = CUTE.ink;
-  ctx.lineWidth = Math.max(3, r * 0.16);
-  ctx.beginPath();
-  ctx.roundRect(me.x - r * 0.5, y - bodyH, r, bodyH, r * 0.35);
-  ctx.fill(); ctx.stroke();
-  ctx.restore();
-  drawSticker(ctx, me.x, y - bodyH - r * 0.55, r * 0.62, CUTE.cream, { lineWidth: Math.max(3, r * 0.14) });
-  // 때리는 팔
-  const sw = me.swing;
-  ctx.save();
-  ctx.translate(me.x - r * 0.2, y - bodyH * 0.95);
-  ctx.rotate(-1.4 + sw * 2.2);
-  ctx.strokeStyle = CUTE.ink; ctx.lineWidth = Math.max(3, r * 0.17); ctx.lineCap = "round";
-  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -r * 1.15); ctx.stroke();
-  ctx.restore();
-}
-
-function drawOpp(ctx, dt) {
-  const { h } = dims;
-  opp.x += (opp.target - opp.x) * Math.min(1, dt * 3.2);
-  const gy = groundY();
-  const r = fluidPx(dims, 24, { min: 17, max: 33 });
-  const bodyH = r * 1.8;
-  // 기뻐하면 살짝 뛴다 — 동물 마스코트 대신 나와 같은 모양의 선수로 그린다
-  const lift = opp.mood === "happy" ? Math.abs(Math.sin(performance.now() / 150)) * r * 0.4 : 0;
-  const y = gy - lift;
-  ctx.save();
-  ctx.fillStyle = CUTE.blue;
-  ctx.strokeStyle = CUTE.ink;
-  ctx.lineWidth = Math.max(3, r * 0.16);
-  ctx.beginPath();
-  ctx.roundRect(opp.x - r * 0.5, y - bodyH, r, bodyH, r * 0.35);
-  ctx.fill(); ctx.stroke();
-  ctx.restore();
-  drawSticker(ctx, opp.x, y - bodyH - r * 0.55, r * 0.62, CUTE.cream, { lineWidth: Math.max(3, r * 0.14) });
-  // 팔 — 아쉬우면 늘어뜨리고, 신나면 번쩍 든다
-  const up = opp.mood === "happy";
-  ctx.save();
-  ctx.translate(opp.x + r * 0.2, y - bodyH * 0.95);
-  ctx.strokeStyle = CUTE.ink; ctx.lineWidth = Math.max(3, r * 0.17); ctx.lineCap = "round";
-  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(up ? r * 0.5 : r * 0.7, up ? -r * 1.0 : r * 0.5); ctx.stroke();
-  ctx.restore();
-}
-
-function drawShuttle(ctx) {
-  if (!shuttle) return;
-  const { w, h } = dims;
-  const r = fluidPx(dims, 24, { min: 17, max: 33 });
-  drawSticker(ctx, shuttle.x, shuttle.y, r, CUTE.cream, { lineWidth: Math.max(3, r * 0.15) });
-  ctx.save();
-  ctx.strokeStyle = CUTE.ink; ctx.lineWidth = Math.max(2, r * 0.11);
-  ctx.beginPath(); ctx.arc(shuttle.x, shuttle.y, r * 0.62, -0.6, 1.2); ctx.stroke();
-  ctx.beginPath(); ctx.arc(shuttle.x, shuttle.y, r * 0.62, 2.0, 3.8); ctx.stroke();
-  ctx.restore();
-  // 바닥 그림자
-  ctx.save();
-  ctx.globalAlpha = 0.25;
-  ctx.fillStyle = CUTE.ink;
-  ctx.beginPath(); ctx.ellipse(shuttle.x, groundY(), r * 0.9, r * 0.24, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
-  // "지금 때리면 어디로" — 서 있는 자리가 곧 조준이므로 그 결과를 늘 보여 준다
-  if (shuttle.side === "opp" && shuttle.x > netX()) {
-    const zi = zoneForMyX(me.x);
-    const label = `${ZONE_LABEL[zi]} → ${fracText(round.cells[zi].f.p, round.cells[zi].f.q)}`;
-    const fs = fluidPx(dims, 19, { min: 14, max: 26 });
-    // 공이 높이 있을 때 위쪽에 붙이면 문제 배너에 가린다 — 그때는 아래로 붙인다
-    const py = shuttle.y < h * 0.34 ? shuttle.y + r * 2.2 : shuttle.y - r * 2.0;
-    const px2 = Math.max(fs * 4.4, Math.min(w - fs * 4.4, shuttle.x));
-    drawStickerRect(ctx, px2, py, fs * 8.2, fs * 1.8, fs * 0.45,
-      PARTY.gold, { lineWidth: Math.max(2.5, fs * 0.14), drop: fs * 0.16 });
-    drawChunkyText(ctx, label, px2, py, fs, CUTE.ink,
-      { outline: "#fff", outlineWidth: Math.max(2, fs * 0.13) });
+  // 성공 직후에만 식을 보여 준다
+  if (now < okFlash) {
+    const efs = fluidPx(dims, 20, { min: 15, max: 27 });
+    drawChunkyText(ctx, `✓ ${round.show}`, w * 0.5, h * 0.40, efs, PARTY.gold,
+      { outline: CUTE.ink, outlineWidth: Math.max(3, efs * 0.22) });
   }
 }
 
@@ -817,82 +559,53 @@ function stepGame() {
   if (remain <= 0) { endGame(); return; }
   const now = performance.now();
 
-  readBody(dt);
-
-  // ── 셔틀콕 물리 ──
-  if (shuttle) {
-    // 넘어온 공은 <내가 서 있는 자리>로 떨어지도록 매 프레임 가로 속도를 다시 잡는다.
-    // 세터가 스파이커에게 맞춰 올려 주는 것과 같다.
-    if (shuttle.side === "opp" && shuttle.arriveAt && shuttle.x > netX() * 0.9) {
-      const left = Math.max(0.09, (shuttle.arriveAt - now) / 1000);
-      shuttle.vx = (me.x - shuttle.x) / left;
-    }
-    shuttle.x += shuttle.vx * dt;
-    shuttle.y += shuttle.vy * dt;
-    shuttle.vy += (shuttle.g || dims.h * 2.1) * dt;
-
-    if (shuttle.side === "opp") {
-      // 내가 <직접 때려야> 한다. 안 때리면 공이 떨어져 상대 점수다.
-      const reach = w * 0.16;
-      const inReach = Math.abs(shuttle.x - me.x) <= reach && shuttle.x > netX() && shuttle.y > h * 0.30;
-      if (inReach && swingNow()) {
-        hitByMe();
-      } else {
-        if (!inReach) swingNow();          // 범위 밖 헛스윙은 그냥 흘려보낸다
-        if (shuttle.y >= groundY()) missed();
-      }
+  if (!resolving) {
+    readBody(dt);
+    // 맞는 자리에 잠깐 서 있으면 성공. 지나치며 스치는 것과 구분하려면 이만큼은 필요하다.
+    if (leftCount(lineX) === round.left) {
+      holdMs += dt * 1000;
+      if (holdMs >= HOLD_MS) succeed();
     } else {
-      if (shuttle.y >= groundY() - h * 0.01) landOnOpponent();
+      holdMs = Math.max(0, holdMs - dt * 1500);
     }
-  } else if (paused && now > paused) {
-    paused = 0;
-    newRound(!firstServe ? false : true);
-    firstServe = false;
   }
 
-  drawCourt(ctx);
-  drawHelp(ctx);
-  drawMyZones(ctx);
-  drawOpp(ctx, dt);
-  drawMe(ctx, now);
-  drawShuttle(ctx);
+  drawRope(ctx, now);
 
-  // 점수판
-  const sfs = fluidPx(dims, 22, { min: 16, max: 30 });
-  drawStickerRect(ctx, w * 0.5, h * 0.925, sfs * 9, sfs * 1.9, sfs * 0.5, CUTE.cream,
-    { lineWidth: Math.max(3, sfs * 0.15), drop: sfs * 0.18 });
-  drawChunkyText(ctx, `나 ${count}  :  ${oppScore} 상대   🏐 랠리 ${rally}`, w * 0.5, h * 0.925, sfs * 0.82,
-    CUTE.ink, { outline: "#fff", outlineWidth: Math.max(2, sfs * 0.12) });
+  // 이 문제에 남은 시간 띠
+  if (!resolving) {
+    const t = Math.max(0, 1 - (now - roundAt) / round.ms);
+    const bw = w * 0.44, bh = fluidPx(dims, 9, { min: 6, max: 13 });
+    const by = h * 0.32;
+    drawStickerRect(ctx, w * 0.5, by, bw, bh, bh / 2, "rgba(255,255,255,0.8)", { lineWidth: 2, drop: 0 });
+    ctx.save();
+    ctx.fillStyle = t < 0.3 ? CUTE.red : PARTY.gold;
+    ctx.beginPath();
+    ctx.roundRect(w * 0.5 - bw / 2, by - bh / 2, Math.max(bh, bw * t), bh, bh / 2);
+    ctx.fill();
+    ctx.restore();
+    if (t <= 0) timeUp();
+  }
 
-  const hudBottom = party.drawHud(ctx, dims, { remainMs: remain, count, suffix: "점" });
-  const bannerBottom = drawCuteBanner(ctx, dims, [
-    { text: round.text, size: 26, chunky: true, color: PARTY.gold },
+  const hudBottom = party.drawHud(ctx, dims, { remainMs: remain, count, suffix: "개" });
+  drawCuteBanner(ctx, dims, [
+    { text: round.text, size: 25, chunky: true, color: PARTY.gold },
     { text: round.hint, size: 14, color: CUTE.ink },
   ], fluidPx, { top: hudBottom });
-  drawDots(ctx, typeof bannerBottom === "number" ? bannerBottom : h * 0.26);
 
-  if (bannerMsg && now < bannerMsg.until) {
-    const fs = fluidPx(dims, 30, { min: 21, max: 42 });
-    const puls = 1 + Math.sin(now / 110) * 0.08;
-    ctx.save();
-    ctx.translate(w * 0.5, h * 0.36); ctx.scale(puls, puls);
-    drawChunkyText(ctx, bannerMsg.text, 0, 0, fs, bannerMsg.color,
-      { outline: CUTE.ink, outlineWidth: Math.max(4, fs * 0.22) });
-    ctx.restore();
-  } else if (remain < 10000) {
-    const fs = fluidPx(dims, 24, { min: 17, max: 33 });
+  if (remain < 10000) {
+    const fs = fluidPx(dims, 22, { min: 16, max: 30 });
     const puls = 1 + Math.sin(now / 120) * 0.08;
     ctx.save();
-    ctx.translate(w * 0.5, h * 0.36); ctx.scale(puls, puls);
+    ctx.translate(w * 0.5, h * 0.87); ctx.scale(puls, puls);
     drawChunkyText(ctx, "🔥 라스트 스퍼트! 코인 2배", 0, 0, fs, CUTE.red,
       { outline: "#fff", outlineWidth: Math.max(4, fs * 0.24) });
     ctx.restore();
   }
-
   drawChunkyText(ctx,
-    mode === "motion" ? "정답 칸 앞으로 뛰어가 서고 · 점프해서 내리꽂아요!"
-      : "정답 칸 자리로 움직이고 · 클릭해서 내리꽂아요!",
-    dims.w * 0.5, dims.h * 0.985, fluidPx(dims, 14, { min: 11, max: 19 }), "#fff",
+    mode === "motion" ? "좌우로 걸어가 줄을 나눠요! 내 몸이 경계선이에요"
+      : "좌우로 움직여 줄을 나눠요! 커서가 경계선이에요",
+    w * 0.5, h * 0.965, fluidPx(dims, 14, { min: 11, max: 19 }), "#fff",
     { outline: CUTE.ink, outlineWidth: fluidPx(dims, 5, { min: 3.5, max: 7 }) });
 
   party.update(dt);
